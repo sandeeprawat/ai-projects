@@ -17,6 +17,9 @@ except Exception:  # pragma: no cover
 import time
 from .config import Settings
 
+import logging
+logger = logging.getLogger("stock.openai_agent")
+
 _md = MarkdownIt("commonmark")
 
 def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str, Any]], user_prompt: Optional[str] = None) -> Dict[str, Any]:
@@ -30,26 +33,27 @@ def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str
     # 1) Preferred path: Azure AI Projects SDK
     projects_endpoint = getattr(Settings, "AZURE_AI_PROJECTS_ENDPOINT", "")
     projects_project = getattr(Settings, "AZURE_AI_PROJECTS_PROJECT", "")
-    assistant_id = Settings.AZURE_OAI_ASSISTANT_ID
-    if AIProjectsClient and projects_endpoint and projects_project and assistant_id:
+    agent_id = getattr(Settings, "AZURE_AI_PROJECTS_AGENT_ID", "")
+    if AIProjectsClient and projects_endpoint and projects_project and agent_id:
+        logger.info("openai_agent: using Azure AI Projects Agents path")
         try:
             cred = DefaultAzureCredential(exclude_interactive_browser_credential=False)
             client = AIProjectsClient(endpoint=projects_endpoint, credential=cred, project=projects_project)  # type: ignore
             # Validate agent exists
-            agent = client.agents.get_agent(agent_id=assistant_id)  # type: ignore[attr-defined]
+            agent = client.agents.get_agent(agent_id=agent_id)  # type: ignore[attr-defined]
             if not getattr(agent, "id", None):
                 raise RuntimeError("Agent not found")
 
             # Try simple one-shot response
             # Recent SDKs expose create_response(agent_id=..., input=...)
             try:
-                resp = client.agents.create_response(agent_id=assistant_id, input=prompt)  # type: ignore[attr-defined]
+                resp = client.agents.create_response(agent_id=agent_id, input=prompt)  # type: ignore[attr-defined]
                 text = getattr(resp, "output_text", None) or getattr(resp, "content", None) or ""
             except Exception:
                 # Try session-based flow if available (best-effort)
                 text = ""
                 try:
-                    session = client.agents.create_session(agent_id=assistant_id)  # type: ignore[attr-defined]
+                    session = client.agents.create_session(agent_id=agent_id)  # type: ignore[attr-defined]
                     client.agents.send_message(session_id=getattr(session, "id", None), role="user", content=prompt)  # type: ignore[attr-defined]
                     # naive polling for a composed output if SDK provides it
                     for _ in range(30):
@@ -87,17 +91,26 @@ def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str
                     if u:
                         citations.append({"title": t, "url": u})
             return {"title": title, "markdown": md, "html": html, "citations": citations}
-        except Exception:
+        except Exception as e:
+            logger.warning("openai_agent: Azure AI Projects Agents path failed: %s", repr(e))
             # fall through to Azure OpenAI Assistants
             pass
 
-    # 2) Fallback path: Azure OpenAI Assistants via AzureOpenAI + AAD token
+    # 2) Fallback path: Azure OpenAI Assistants via AzureOpenAI using API key if available, else AAD token
     endpoint = Settings.AZURE_OPENAI_ENDPOINT
     api_version = Settings.AZURE_OPENAI_API_VERSION
+    api_key = Settings.AZURE_OPENAI_API_KEY
+    assistant_id = Settings.AZURE_OAI_ASSISTANT_ID
     if AzureOpenAI and endpoint and assistant_id:
-        cred = DefaultAzureCredential(exclude_interactive_browser_credential=False)
-        token = cred.get_token("https://cognitiveservices.azure.com/.default").token
-        client = AzureOpenAI(azure_endpoint=endpoint, api_version=api_version, azure_ad_token=token)
+        client = None
+        if api_key:
+            logger.info("openai_agent: using Azure OpenAI Assistants with API key")
+            client = AzureOpenAI(azure_endpoint=endpoint, api_version=api_version, api_key=api_key)
+        else:
+            logger.info("openai_agent: using Azure OpenAI Assistants with AAD token")
+            cred = DefaultAzureCredential(exclude_interactive_browser_credential=False)
+            token = cred.get_token("https://cognitiveservices.azure.com/.default").token
+            client = AzureOpenAI(azure_endpoint=endpoint, api_version=api_version, azure_ad_token=token)
 
         thread = client.beta.threads.create()
         client.beta.threads.messages.create(thread_id=thread.id, role="user", content=prompt)
@@ -183,7 +196,7 @@ def _fallback_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any]
     idx = 1
     sections: List[str] = [f"# {title}", ""]
     sections.append("## Overview")
-    sections.append("This is a locally generated summary (no Azure OpenAI configured).")
+    sections.append("This is a locally generated summary.")
     if user_prompt:
         sections.append("")
         sections.append("## User Prompt")
@@ -220,16 +233,19 @@ def synthesize_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any
     deployment = Settings.AZURE_OPENAI_DEPLOYMENT
     api_key = Settings.AZURE_OPENAI_API_KEY
 
-    # 1) Prefer Azure AI Agent with Managed Identity (AAD)
+    # 1) Prefer Azure AI Projects Agents if configured, else try Assistants
     try:
-        if Settings.AZURE_OAI_ASSISTANT_ID and endpoint:
+        if (Settings.AZURE_AI_PROJECTS_ENDPOINT and Settings.AZURE_AI_PROJECTS_PROJECT and Settings.AZURE_AI_PROJECTS_AGENT_ID) or (Settings.AZURE_OAI_ASSISTANT_ID and endpoint):
+            logger.info("openai_agent: attempting agent/assistants path")
             return _synthesize_with_agent(symbols, sources_per_symbol, user_prompt)
-    except Exception:
+    except Exception as e:
+        logger.warning("openai_agent: agent/assistants path raised: %s", repr(e))
         # fall through to other strategies
         pass
 
     # 2) Fallback to Chat Completions with API key if configured
     if AzureOpenAI and api_key and endpoint and deployment:
+        logger.info("openai_agent: using Chat Completions with API key")
         prompt = _build_prompt(symbols, sources_per_symbol, user_prompt)
         client = AzureOpenAI(api_key=api_key, api_version=api_version, azure_endpoint=endpoint)
         try:
@@ -262,6 +278,7 @@ def synthesize_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any
             pass
 
     # 3) Final fallback: local synthesizer
+    logger.warning("openai_agent: falling back to local synthesizer")
     title, md, citations = _fallback_report(symbols, sources_per_symbol, user_prompt)
     html = _md.render(md)
     return {"title": title, "markdown": md, "html": html, "citations": citations}

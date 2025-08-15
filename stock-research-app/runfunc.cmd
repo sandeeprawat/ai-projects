@@ -1,5 +1,5 @@
 @echo off
-setlocal ENABLEEXTENSIONS ENABLEDELAYEDEXECUTION
+setlocal ENABLEEXTENSIONS ENABLEDELAYEDEXPANSION
 
 REM ----------------------------------------------------------------------------
 REM Azure Functions local runner via venv, with logging to .\.logs\func-host.log
@@ -43,7 +43,7 @@ echo [INFO] Logging to %LOG_FILE%
 REM Start host from the api folder and tee output to log file
 pushd api >nul 2>&1
 echo [INFO] Starting Azure Functions host on http://localhost:7071/
-powershell -NoProfile -ExecutionPolicy Bypass -Command "func host start --port 7071 2^>^&1 ^| Tee-Object -FilePath '%LOG_FILE%' -Append"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Continue'; func host start --port 7071 *>&1 | Tee-Object -FilePath '%LOG_FILE%' -Append"
 set "EXITCODE=%ERRORLEVEL%"
 popd >nul 2>&1
 
