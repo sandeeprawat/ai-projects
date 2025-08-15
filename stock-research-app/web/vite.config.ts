@@ -1,12 +1,12 @@
 import { defineConfig } from "vite";
 
-// Vite dev server with proxy to local Azure Functions host on :7071
+﻿// Vite dev server with proxy to local Azure Functions host on :7081
 export default defineConfig({
   server: {
-    port: 5173,
+    port: 5174,
     proxy: {
       "/api": {
-        target: "http://localhost:7071",
+        target: "http://localhost:7081",
         changeOrigin: true,
         secure: false
       }

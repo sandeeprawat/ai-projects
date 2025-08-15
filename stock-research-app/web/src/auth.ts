@@ -32,6 +32,11 @@ export function setToken(token: string) {
 export function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
   window.dispatchEvent(new CustomEvent("auth:changed", { detail: { token: null } }));
+  // Ensure UI refresh after sign-out
+  if (!location.hash || location.hash === "#" || location.hash === "") {
+    location.hash = "/schedules";
+  }
+  setTimeout(() => location.reload(), 50);
 }
 
 export function decodeJwt(t: string | null | undefined): JwtClaims | null {
