@@ -7,9 +7,9 @@ from typing import Any, Dict
 import azure.functions as func
 import azure.durable_functions as df
 
-from ...common.auth import get_user_context
-from ...common.models import Run
-from ...common.cosmos import get_schedule as cosmos_get_schedule, create_run as cosmos_create_run
+from ..common.auth import get_user_context
+from ..common.models import Run
+from ..common.cosmos import get_schedule as cosmos_get_schedule, create_run as cosmos_create_run
 
 async def main(req: func.HttpRequest, starter: str) -> func.HttpResponse:
     user = get_user_context(dict(req.headers))

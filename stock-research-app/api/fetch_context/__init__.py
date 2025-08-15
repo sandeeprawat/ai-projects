@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Dict, Any, List
-from ...common import bing
+from ..common import bing
 
 def main(input: Dict[str, Any]) -> List[Dict[str, str]]:
     """

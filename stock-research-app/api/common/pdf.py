@@ -1,60 +1,46 @@
 from __future__ import annotations
 
 from io import BytesIO
+from typing import Optional, List
+
 from reportlab.lib.pagesizes import LETTER
-from reportlab.pdfgen import canvas
-from markdown_it import MarkdownIt
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
-_md = MarkdownIt()
-
-def markdown_to_plain_lines(md_text: str):
-    # Very simple: extract inline text lines from tokens
-    tokens = _md.parse(md_text or "")
-    lines = []
-    current = []
-    for t in tokens:
-        if t.type == "inline" and t.content:
-            current.append(t.content)
-        if t.type in ("paragraph_close", "heading_close", "list_item_close"):
-            if current:
-                lines.append(" ".join(current))
-                current = []
-        if t.type == "bullet_list_close" or t.type == "ordered_list_close":
-            lines.append("")  # blank line after list
-        if t.type == "heading_open":
-            # add a blank line before headings for spacing
-            if lines and lines[-1] != "":
-                lines.append("")
-    if current:
-        lines.append(" ".join(current))
-    # Normalize: split long lines
-    normalized = []
-    for line in lines:
-        if not line:
-            normalized.append("")
-            continue
-        while len(line) > 100:
-            normalized.append(line[:100])
-            line = line[100:]
-        normalized.append(line)
-    return normalized
-
-def markdown_to_pdf_bytes(md_text: str) -> bytes:
+def markdown_to_pdf_bytes(markdown_text: str, title: Optional[str] = None) -> bytes:
+    """
+    Very lightweight Markdown->PDF: renders text as paragraphs.
+    Headings starting with '#' are bolded by simple styling heuristics.
+    """
     buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=LETTER)
-    width, height = LETTER
-    left_margin = 40
-    top = height - 40
-    y = top
-    line_height = 14
+    doc = SimpleDocTemplate(buf, pagesize=LETTER)
+    styles = getSampleStyleSheet()
+    story: List = []
 
-    for line in markdown_to_plain_lines(md_text):
-        if y < 40:
-            c.showPage()
-            y = top
-        c.drawString(left_margin, y, line)
-        y -= line_height
+    if title:
+        story.append(Paragraph(title, styles["Title"]))
+        story.append(Spacer(1, 12))
 
-    c.showPage()
-    c.save()
+    lines = (markdown_text or "").splitlines()
+    for line in lines:
+        text = line.strip()
+        if not text:
+            story.append(Spacer(1, 8))
+            continue
+        # naive heading detection
+        if text.startswith("# "):
+            story.append(Paragraph(text.lstrip("# ").strip(), styles["Heading1"]))
+        elif text.startswith("## "):
+            story.append(Paragraph(text.lstrip("# ").strip(), styles["Heading2"]))
+        elif text.startswith("### "):
+            story.append(Paragraph(text.lstrip("# ").strip(), styles["Heading3"]))
+        else:
+            # Paragraph supports a small HTML subset; escape angle brackets
+            safe = (
+                text.replace("&", "&")
+                .replace("<", "<")
+                .replace(">", ">")
+            )
+            story.append(Paragraph(safe, styles["BodyText"]))
+    doc.build(story)
     return buf.getvalue()

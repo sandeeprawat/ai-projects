@@ -6,10 +6,10 @@ from typing import Optional, Dict
 
 import azure.functions as func
 
-from ...common.auth import get_user_context
-from ...common.cosmos import get_report
-from ...common.config import Settings
-from ...common.blob import make_read_sas_url
+from ..common.auth import get_user_context
+from ..common.cosmos import get_report
+from ..common.config import Settings
+from ..common.blob import make_read_sas_url
 
 async def main(req: func.HttpRequest) -> func.HttpResponse:
     user = get_user_context(dict(req.headers))

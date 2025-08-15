@@ -6,8 +6,8 @@ from typing import Optional
 
 import azure.functions as func
 
-from ...common.auth import get_user_context
-from ...common.cosmos import list_reports_for_user
+from ..common.auth import get_user_context
+from ..common.cosmos import list_reports_for_user
 
 async def main(req: func.HttpRequest) -> func.HttpResponse:
     user = get_user_context(dict(req.headers))

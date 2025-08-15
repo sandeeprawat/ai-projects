@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Dict, Any, List
-from ...common.openai_agent import synthesize_report as _synthesize
+from ..common.openai_agent import synthesize_report as _synthesize
 
 def main(input: Dict[str, Any]) -> Dict[str, Any]:
     """

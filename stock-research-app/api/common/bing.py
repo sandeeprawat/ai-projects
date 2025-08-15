@@ -1,67 +1,89 @@
 from __future__ import annotations
 
+from typing import Any, Dict, List, Optional
 import re
-from typing import List, Dict, Any, Optional
+
 import httpx
 from bs4 import BeautifulSoup
-from readability import Document
+try:
+    from readability.readability import Document  # provided by readability-lxml
+except Exception:
+    Document = None  # type: ignore
+
 from .config import Settings
 
-DEFAULT_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-}
-
-def web_search(query: str, top_k: int = 5, market: str = "en-US") -> List[Dict[str, str]]:
+def web_search(query: str, top_k: int = 6) -> List[Dict[str, str]]:
     """
-    Uses Azure Bing Search v7 to fetch top results.
-    Returns: [{title, url, snippet}]
+    Uses Bing Web Search v7 if configured. Otherwise returns [].
+    Output items: {"title": str, "url": str, "excerpt": str}
     """
-    key = Settings.BING_V7_KEY
-    endpoint = Settings.BING_V7_ENDPOINT
-    if not key or not endpoint:
-        raise RuntimeError("Bing Search configuration missing (BING_V7_KEY/BING_V7_ENDPOINT).")
+    q = (query or "").strip()
+    if not q:
+        return []
+    key = (Settings.BING_V7_KEY or "").strip()
+    endpoint = (Settings.BING_V7_ENDPOINT or "https://api.bing.microsoft.com").rstrip("/")
+    if not key:
+        return []
 
-    url = f"{endpoint.rstrip('/')}/bing/v7.0/search"
-    params = {"q": query, "count": top_k, "mkt": market, "responseFilter": "Webpages"}
-    headers = {"Ocp-Apim-Subscription-Key": key, **DEFAULT_HEADERS}
-
-    with httpx.Client(timeout=20) as client:
-        r = client.get(url, params=params, headers=headers)
-        r.raise_for_status()
-        data = r.json()
-        items = []
-        for it in (data.get("webPages") or {}).get("value", []):
-            items.append({
-                "title": it.get("name", ""),
-                "url": it.get("url", ""),
-                "snippet": it.get("snippet", "")
-            })
-        return items
-
-def fetch_and_extract(url: str, max_chars: int = 4000) -> Optional[Dict[str, str]]:
-    """
-    Fetches a URL and extracts the main content using readability.
-    Returns {title, url, excerpt} or None on failure.
-    """
+    url = f"{endpoint}/v7.0/search"
+    headers = {"Ocp-Apim-Subscription-Key": key}
+    params = {"q": q, "count": max(1, int(top_k or 1)), "textDecorations": False, "safeSearch": "Moderate"}
     try:
-        with httpx.Client(timeout=20, headers=DEFAULT_HEADERS, follow_redirects=True) as client:
-            resp = client.get(url)
-            resp.raise_for_status()
-            html = resp.text
-        doc = Document(html)
-        title = doc.short_title() or ""
-        content_html = doc.summary()
-        soup = BeautifulSoup(content_html, "lxml")
-        # Remove scripts/styles/navs
-        for tag in soup(["script", "style", "noscript"]):
-            tag.decompose()
-        text = soup.get_text(separator="\n")
-        # Normalize whitespace
-        text = re.sub(r"\s+\n", "\n", text)
-        text = re.sub(r"\n{3,}", "\n\n", text).strip()
-        excerpt = text[:max_chars]
-        if not excerpt:
-            return None
-        return {"title": title, "url": url, "excerpt": excerpt}
+        with httpx.Client(timeout=15.0) as client:
+            r = client.get(url, headers=headers, params=params)
+            r.raise_for_status()
+            data = r.json()
     except Exception:
+        return []
+
+    items: List[Dict[str, str]] = []
+    for it in (data.get("webPages") or {}).get("value", []):
+        title = (it.get("name") or "").strip()
+        link = (it.get("url") or "").strip()
+        snippet = (it.get("snippet") or "").strip()
+        if link:
+            items.append({"title": title or link, "url": link, "excerpt": snippet})
+        if len(items) >= top_k:
+            break
+    return items
+
+def _strip_text(t: str) -> str:
+    t = re.sub(r"\s+", " ", (t or "").strip())
+    return t
+
+def fetch_and_extract(url: str) -> Optional[Dict[str, str]]:
+    """
+    Fetches a URL and extracts a readable title + excerpt using readability-lxml.
+    Returns {"title": str, "url": str, "excerpt": str} or None on failure.
+    """
+    u = (url or "").strip()
+    if not u:
         return None
+    try:
+        with httpx.Client(follow_redirects=True, timeout=20.0, headers={"User-Agent": "Mozilla/5.0"}) as client:
+            r = client.get(u)
+            r.raise_for_status()
+            html = r.text
+    except Exception:
+        return {"title": u, "url": u, "excerpt": ""}
+
+    if Document is not None:
+        try:
+            doc = Document(html)
+            title = _strip_text(doc.short_title() or "") or u
+            summary_html = doc.summary(html_partial=True)
+            soup = BeautifulSoup(summary_html, "html.parser")
+            text = _strip_text(soup.get_text(separator=" ").strip())
+            excerpt = text[:700]
+            return {"title": title, "url": u, "excerpt": excerpt}
+        except Exception:
+            pass
+    try:
+        # Fallback: crude extraction from full page
+        soup = BeautifulSoup(html, "html.parser")
+        title = _strip_text((soup.title.string if soup.title else "") or "") or u
+        text = _strip_text(soup.get_text(separator=" ").strip())
+        excerpt = text[:700]
+        return {"title": title, "url": u, "excerpt": excerpt}
+    except Exception:
+        return {"title": u, "url": u, "excerpt": ""}

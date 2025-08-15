@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Dict, Any
 from datetime import datetime, timezone
-from ...common.config import Settings
-from ...common import blob as blob_util
-from ...common import pdf as pdf_util
-from ...common.models import Report
-from ...common.cosmos import save_report as cosmos_save_report
+from ..common.config import Settings
+from ..common import blob as blob_util
+from ..common import pdf as pdf_util
+from ..common.models import Report
+from ..common.cosmos import save_report as cosmos_save_report
 
 def main(input: Dict[str, Any]) -> Dict[str, Any]:
     """

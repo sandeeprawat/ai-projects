@@ -1,135 +1,136 @@
 from __future__ import annotations
 
-from typing import Dict, Any, Optional, Iterable
-from azure.cosmos import CosmosClient, PartitionKey, exceptions
-from .config import Settings
+import json
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional
+from uuid import uuid4
+from datetime import datetime, timezone
+
 from .models import Schedule, Run, Report
 
-_client: Optional[CosmosClient] = None
-_db = None
-_containers: Dict[str, Any] = {}
+# Lightweight local JSON store used for local dev in place of Cosmos DB.
+# File path: stock-research-app/.data/db.json
+_DATA_DIR = Path(__file__).resolve().parents[2] / ".data"
+_DATA_FILE = _DATA_DIR / "db.json"
 
-def _get_client() -> CosmosClient:
-    global _client
-    if _client is None:
-        if not Settings.COSMOS_DB_URL or not Settings.COSMOS_DB_KEY:
-            raise RuntimeError("COSMOS_DB_URL and COSMOS_DB_KEY must be set.")
-        _client = CosmosClient(Settings.COSMOS_DB_URL, credential=Settings.COSMOS_DB_KEY)
-    return _client
 
-def _get_db():
-    global _db
-    if _db is None:
-        _db = _get_client().create_database_if_not_exists(id=Settings.COSMOS_DB_NAME)
-    return _db
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
-def _get_container(name: str):
-    global _containers
-    if name in _containers:
-        return _containers[name]
-    db = _get_db()
-    # All containers partition on /userId for per-user isolation
-    container = db.create_container_if_not_exists(
-        id=name,
-        partition_key=PartitionKey(path="/userId")
-    )
-    _containers[name] = container
-    return container
 
-def ensure_containers() -> None:
-    _get_container(Settings.COSMOS_CONTAINER_SCHEDULES)
-    _get_container(Settings.COSMOS_CONTAINER_RUNS)
-    _get_container(Settings.COSMOS_CONTAINER_REPORTS)
-
-def upsert_item(container_name: str, item: Dict[str, Any]) -> Dict[str, Any]:
-    container = _get_container(container_name)
-    return container.upsert_item(item)
-
-def read_item(container_name: str, item_id: str, user_id: str) -> Optional[Dict[str, Any]]:
-    container = _get_container(container_name)
+def _ensure_store() -> Dict[str, Any]:
+    if not _DATA_DIR.exists():
+        _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if not _DATA_FILE.exists():
+        initial = {"schedules": [], "runs": [], "reports": []}
+        _DATA_FILE.write_text(json.dumps(initial, indent=2), encoding="utf-8")
+        return initial
     try:
-        return container.read_item(item=item_id, partition_key=user_id)
-    except exceptions.CosmosResourceNotFoundError:
-        return None
+        return json.loads(_DATA_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        initial = {"schedules": [], "runs": [], "reports": []}
+        _DATA_FILE.write_text(json.dumps(initial, indent=2), encoding="utf-8")
+        return initial
 
-def query_items(container_name: str, query: str, params: Optional[Iterable[Dict[str, Any]]] = None) -> Iterable[Dict[str, Any]]:
-    container = _get_container(container_name)
-    return container.query_items(query=query, parameters=params or [], enable_cross_partition_query=True)
 
-# Domain helpers
+def _save_store(db: Dict[str, Any]) -> None:
+    _DATA_FILE.write_text(json.dumps(db, indent=2), encoding="utf-8")
 
-def create_schedule(schedule: Schedule) -> Dict[str, Any]:
-    ensure_containers()
-    doc = schedule.model_dump()
-    return upsert_item(Settings.COSMOS_CONTAINER_SCHEDULES, doc)
+
+# Schedules
+
+def create_schedule(sched: Schedule) -> Dict[str, Any]:
+    db = _ensure_store()
+    data = sched.dict()
+    data["id"] = data.get("id") or str(uuid4())
+    data["createdAt"] = _now_iso()
+    # nextRunAt should be precomputed by caller; keep if present
+    db["schedules"].append(data)
+    _save_store(db)
+    return data
+
 
 def get_schedule(schedule_id: str, user_id: str) -> Optional[Dict[str, Any]]:
-    return read_item(Settings.COSMOS_CONTAINER_SCHEDULES, schedule_id, user_id)
+    db = _ensure_store()
+    for s in db.get("schedules", []):
+        if s.get("id") == schedule_id and s.get("userId") == user_id:
+            return s
+    return None
+
+
+def list_due_schedules(now_iso: str, limit: int = 50) -> List[Dict[str, Any]]:
+    db = _ensure_store()
+    due = []
+    for s in db.get("schedules", []):
+        try:
+            if not s.get("active", True):
+                continue
+            nra = s.get("nextRunAt")
+            if not nra:
+                continue
+            if nra <= now_iso:
+                due.append(s)
+        except Exception:
+            continue
+    # Sort by nextRunAt asc
+    due.sort(key=lambda x: (x.get("nextRunAt") or ""))
+    return due[: max(0, int(limit or 0)) or 50]
+
+
+def update_schedule_next_run(schedule_id: str, user_id: str, next_iso: str) -> bool:
+    db = _ensure_store()
+    changed = False
+    for s in db.get("schedules", []):
+        if s.get("id") == schedule_id and s.get("userId") == user_id:
+            s["nextRunAt"] = next_iso
+            changed = True
+            break
+    if changed:
+        _save_store(db)
+    return changed
+
+
+# Runs
 
 def create_run(run: Run) -> Dict[str, Any]:
-    ensure_containers()
-    doc = run.model_dump()
-    return upsert_item(Settings.COSMOS_CONTAINER_RUNS, doc)
+    db = _ensure_store()
+    data = run.dict()
+    data["id"] = data.get("id") or str(uuid4())
+    data["createdAt"] = _now_iso()
+    db["runs"].append(data)
+    _save_store(db)
+    return data
 
-def update_run_status(run_id: str, user_id: str, status: str, duration_ms: Optional[int] = None, error: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    existing = read_item(Settings.COSMOS_CONTAINER_RUNS, run_id, user_id)
-    if not existing:
-        return None
-    existing["status"] = status
-    if duration_ms is not None:
-        existing["durationMs"] = duration_ms
-    if error is not None:
-        existing["error"] = error
-    return upsert_item(Settings.COSMOS_CONTAINER_RUNS, existing)
+
+# Reports
 
 def save_report(report: Report) -> Dict[str, Any]:
-    ensure_containers()
-    doc = report.model_dump()
-    return upsert_item(Settings.COSMOS_CONTAINER_REPORTS, doc)
+    db = _ensure_store()
+    data = report.dict()
+    data["id"] = data.get("id") or str(uuid4())
+    data["createdAt"] = data.get("createdAt") or _now_iso()
+    db["reports"].append(data)
+    _save_store(db)
+    return data
 
-# Additional domain helpers
-
-def upsert_schedule_doc(schedule_doc: Dict[str, Any]) -> Dict[str, Any]:
-    ensure_containers()
-    return upsert_item(Settings.COSMOS_CONTAINER_SCHEDULES, schedule_doc)
-
-def update_schedule_next_run(schedule_id: str, user_id: str, next_run_at_iso: str) -> Optional[Dict[str, Any]]:
-    sched = read_item(Settings.COSMOS_CONTAINER_SCHEDULES, schedule_id, user_id)
-    if not sched:
-        return None
-    sched["nextRunAt"] = next_run_at_iso
-    return upsert_item(Settings.COSMOS_CONTAINER_SCHEDULES, sched)
-
-def list_schedules_for_user(user_id: str, limit: int = 100) -> Iterable[Dict[str, Any]]:
-    q = f"SELECT TOP {int(limit)} * FROM c WHERE c.userId = @uid ORDER BY c.createdAt DESC"
-    return query_items(Settings.COSMOS_CONTAINER_SCHEDULES, q, [{"name": "@uid", "value": user_id}])
-
-def list_due_schedules(now_iso: str, limit: int = 50) -> Iterable[Dict[str, Any]]:
-    # Cross-partition query for active schedules due to run
-    q = f"""
-    SELECT TOP {int(limit)} * FROM c
-    WHERE c.active = true AND IS_DEFINED(c.nextRunAt) AND c.nextRunAt <= @now
-    ORDER BY c.nextRunAt ASC
-    """
-    return query_items(Settings.COSMOS_CONTAINER_SCHEDULES, q, [{"name": "@now", "value": now_iso}])
-
-def list_reports_for_user(user_id: str, schedule_id: Optional[str] = None, limit: int = 50) -> Iterable[Dict[str, Any]]:
-    if schedule_id:
-        q = f"SELECT TOP {int(limit)} * FROM c WHERE c.userId = @uid AND c.scheduleId = @sid ORDER BY c.createdAt DESC"
-        params = [{"name": "@uid", "value": user_id}, {"name": "@sid", "value": schedule_id}]
-    else:
-        q = f"SELECT TOP {int(limit)} * FROM c WHERE c.userId = @uid ORDER BY c.createdAt DESC"
-        params = [{"name": "@uid", "value": user_id}]
-    return query_items(Settings.COSMOS_CONTAINER_REPORTS, q, params)
 
 def get_report(report_id: str, user_id: str) -> Optional[Dict[str, Any]]:
-    return read_item(Settings.COSMOS_CONTAINER_REPORTS, report_id, user_id)
+    db = _ensure_store()
+    for r in db.get("reports", []):
+        if r.get("id") == report_id and r.get("userId") == user_id:
+            return r
+    return None
 
-def list_runs_for_user(user_id: str, schedule_id: Optional[str] = None, limit: int = 100) -> Iterable[Dict[str, Any]]:
-    if schedule_id:
-        q = f"SELECT TOP {int(limit)} * FROM c WHERE c.userId = @uid AND c.scheduleId = @sid ORDER BY c.startedAt DESC"
-        params = [{"name": "@uid", "value": user_id}, {"name": "@sid", "value": schedule_id}]
-    else:
-        q = f"SELECT TOP {int(limit)} * FROM c WHERE c.userId = @uid ORDER BY c.startedAt DESC"
-        params = [{"name": "@uid", "value": user_id}]
-    return query_items(Settings.COSMOS_CONTAINER_RUNS, q, params)
+
+def list_reports_for_user(user_id: str, schedule_id: Optional[str] = None, limit: int = 50) -> Iterable[Dict[str, Any]]:
+    db = _ensure_store()
+    items: List[Dict[str, Any]] = []
+    for r in db.get("reports", []):
+        if r.get("userId") != user_id:
+            continue
+        if schedule_id and r.get("scheduleId") != schedule_id:
+            continue
+        items.append(r)
+    # Sort newest first by createdAt
+    items.sort(key=lambda x: (x.get("createdAt") or ""), reverse=True)
+    return items[: max(0, int(limit or 0)) or 50]

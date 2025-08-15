@@ -7,9 +7,9 @@ from typing import Any, Dict, List
 import azure.functions as func
 import azure.durable_functions as df
 
-from ...common.auth import get_user_context
-from ...common.models import Schedule, Recurrence, EmailSettings, compute_next_run_utc
-from ...common.cosmos import create_schedule as cosmos_create_schedule
+from ..common.auth import get_user_context
+from ..common.models import Schedule, Recurrence, EmailSettings, compute_next_run_utc
+from ..common.cosmos import create_schedule as cosmos_create_schedule
 
 async def main(req: func.HttpRequest, starter: str) -> func.HttpResponse:
     try:

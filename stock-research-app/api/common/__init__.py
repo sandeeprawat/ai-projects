@@ -1,1 +1,3 @@
-# Common utilities package for Azure Functions app (config, models, auth, cosmos, blob, bing, openai_agent, pdf)
+# Common utilities package for the Functions app.
+# This file makes 'common' a Python package so imports like
+# 'from ..common import blob as blob_util' resolve correctly.

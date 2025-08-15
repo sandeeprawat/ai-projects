@@ -4,7 +4,8 @@
     "durableTask": {
       "hubName": "StockResearchHub",
       "storageProvider": {
-        "type": "AzureStorage"
+        "type": "AzureStorage",
+        "connectionStringName": "AzureWebJobsStorage"
       }
     }
   },

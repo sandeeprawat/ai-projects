@@ -3,19 +3,11 @@ from __future__ import annotations
 import base64
 from typing import Dict, Any, List, Optional
 
-from azure.communication.email import (
-    EmailClient,
-    EmailContent,
-    EmailAddress,
-    EmailMessage,
-    EmailRecipients,
-    EmailAttachment,
-    EmailAttachmentType,
-)
+from azure.communication.email import EmailClient
 from azure.storage.blob import BlobServiceClient
 
-from ...common.config import Settings, get_storage_connection_string
-from ...common.blob import make_read_sas_url
+from ..common.config import Settings, get_storage_connection_string
+from ..common.blob import make_read_sas_url
 
 def _download_blob_bytes(container: str, blob_path: str) -> Optional[bytes]:
     try:
@@ -76,30 +68,30 @@ def main(input: Dict[str, Any]) -> Dict[str, Any]:
     body_html = "\n".join(html_parts)
 
     # Optionally attach PDF bytes if present
-    attachments: List[EmailAttachment] = []
+    attachments: List[dict] = []
     if pdf_path:
         pdf_bytes = _download_blob_bytes(container, pdf_path)
         if pdf_bytes:
-            attachments.append(
-                EmailAttachment(
-                    name="report.pdf",
-                    attachment_type=EmailAttachmentType.PDF,
-                    content_bytes_base64=base64.b64encode(pdf_bytes).decode("utf-8"),
-                )
-            )
+            attachments.append({
+                "name": "report.pdf",
+                "attachmentType": "pdf",
+                "contentBytesBase64": base64.b64encode(pdf_bytes).decode("utf-8"),
+            })
 
-    to_list = [EmailAddress(email=x) for x in recipients]
-    content = EmailContent(subject=f"[Stock Research] {title}", html=body_html)
-    message = EmailMessage(
-        sender=Settings.EMAIL_SENDER,
-        content=content,
-        recipients=EmailRecipients(to=to_list),
-        attachments=attachments if attachments else None,
-    )
+    to_list = [{"address": x} for x in recipients]
+    message: Dict[str, Any] = {
+        "sender": Settings.EMAIL_SENDER,
+        "content": {"subject": f"[Stock Research] {title}", "html": body_html},
+        "recipients": {"to": to_list},
+    }
+    if attachments:
+        message["attachments"] = attachments
 
     client = EmailClient.from_connection_string(Settings.ACS_CONNECTION_STRING)
     try:
-        client.send(message)
+        poller = client.begin_send(message)
+        # wait up to 60s for send to complete (no-op if service returns immediately)
+        poller.result(60)
         return {"sent": True}
     except Exception as e:
         return {"sent": False, "error": str(e)}

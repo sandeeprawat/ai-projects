@@ -7,13 +7,13 @@ from typing import Any, Dict
 import azure.functions as func
 import azure.durable_functions as df
 
-from ...common.models import Recurrence, compute_next_run_utc, Run
-from ...common.cosmos import (
+from ..common.models import Recurrence, compute_next_run_utc, Run
+from ..common.cosmos import (
     list_due_schedules,
     update_schedule_next_run,
     create_run as cosmos_create_run,
 )
-from ...common.auth import get_user_context  # not used here, but kept for parity
+from ..common.auth import get_user_context  # not used here, but kept for parity
 
 async def main(mytimer: func.TimerRequest, starter: str) -> None:
     # Determine "now" in ISO for query (server time assumed UTC on Azure Functions)

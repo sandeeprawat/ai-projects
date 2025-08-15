@@ -1,92 +1,120 @@
 from __future__ import annotations
 
-from typing import List, Dict, Any
-from openai import AzureOpenAI
-from .config import Settings
+from typing import Any, Dict, List, Tuple
 from markdown_it import MarkdownIt
 
-_md = MarkdownIt()
+try:
+    # Azure OpenAI SDK via OpenAI 1.x
+    from openai import AzureOpenAI  # type: ignore
+except Exception:  # pragma: no cover
+    AzureOpenAI = None  # type: ignore
 
-def _md_to_html(md_text: str) -> str:
-    return _md.render(md_text)
+from .config import Settings
+
+_md = MarkdownIt("commonmark")
+
+def _build_prompt(symbols: List[str], sources_per_symbol: List[Dict[str, Any]]) -> str:
+    lines: List[str] = []
+    lines.append("You are an equity research assistant. Create a concise but detailed research brief.")
+    lines.append("")
+    lines.append(f"Symbols: {', '.join(symbols)}")
+    lines.append("")
+    for entry in sources_per_symbol:
+        sym = entry.get("symbol") or ""
+        lines.append(f"Sources for {sym}:")
+        for s in entry.get("sources") or []:
+            title = s.get("title") or ""
+            url = s.get("url") or ""
+            excerpt = (s.get("excerpt") or "").strip()
+            lines.append(f"- {title} ({url})")
+            if excerpt:
+                lines.append(f"  Excerpt: {excerpt[:500]}")
+        lines.append("")
+    lines.append("Output markdown with sections: Overview, Recent Developments, Financials, Risks, Outlook.")
+    lines.append("Cite sources inline as [n] and provide a Citations list at the end with title + URL.")
+    return "\n".join(lines)
+
+def _fallback_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any]]) -> Tuple[str, str, List[Dict[str, str]]]:
+    title = f"Stock Research Report: {', '.join(symbols) or 'N/A'}"
+    citations: List[Dict[str, str]] = []
+    idx = 1
+    sections: List[str] = [f"# {title}", ""]
+    sections.append("## Overview")
+    sections.append("This is a locally generated summary (no Azure OpenAI configured).")
+    sections.append("")
+    for entry in sources_per_symbol:
+        sym = entry.get("symbol") or ""
+        sections.append(f"## {sym} - Recent Sources")
+        for s in entry.get("sources") or []:
+            t = s.get("title") or "Source"
+            u = s.get("url") or ""
+            ex = (s.get("excerpt") or "").strip()
+            if u:
+                citations.append({"title": t, "url": u})
+                sections.append(f"- {t} [{idx}]")
+                if ex:
+                    sections.append(f"  - {ex[:300]}")
+                idx += 1
+        sections.append("")
+    if citations:
+        sections.append("## Citations")
+        for i, c in enumerate(citations, start=1):
+            sections.append(f"[{i}] {c.get('title')}: {c.get('url')}")
+    md = "\n".join(sections)
+    return title, md, citations
 
 def synthesize_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Calls Azure OpenAI to synthesize a detailed stock research report with citations.
-    sources_per_symbol: [{ "symbol": "AAPL", "sources": [ { "title": str, "url": str, "excerpt": str }, ... ] }, ...]
-    Returns: { "title": str, "markdown": str, "html": str, "citations": [ { "n": int, "title": str, "url": str } ] }
+    Returns: {"title": str, "markdown": str, "html": str, "citations": [...]}
     """
-    if not Settings.AZURE_OPENAI_ENDPOINT or not Settings.AZURE_OPENAI_API_KEY or not Settings.AZURE_OPENAI_DEPLOYMENT:
-        raise RuntimeError("Azure OpenAI configuration missing (endpoint/key/deployment).")
+    api_key = Settings.AZURE_OPENAI_API_KEY
+    endpoint = Settings.AZURE_OPENAI_ENDPOINT
+    api_version = Settings.AZURE_OPENAI_API_VERSION
+    deployment = Settings.AZURE_OPENAI_DEPLOYMENT
 
-    client = AzureOpenAI(
-        azure_endpoint=Settings.AZURE_OPENAI_ENDPOINT,
-        api_key=Settings.AZURE_OPENAI_API_KEY,
-        api_version=Settings.AZURE_OPENAI_API_VERSION,
-    )
+    # Fallback to offline summary if not configured
+    if not (AzureOpenAI and api_key and endpoint and deployment):
+        title, md, citations = _fallback_report(symbols, sources_per_symbol)
+        html = _md.render(md)
+        return {"title": title, "markdown": md, "html": html, "citations": citations}
 
-    # Flatten and enumerate citations
-    flat_sources: List[Dict[str, str]] = []
-    for entry in sources_per_symbol:
-        symbol = entry.get("symbol")
-        for s in entry.get("sources", [])[:8]:
-            flat_sources.append({
-                "symbol": symbol,
-                "title": (s.get("title") or "")[:200],
-                "url": s.get("url") or "",
-                "excerpt": (s.get("excerpt") or "")[:1200],
-            })
-    # Deduplicate by URL while keeping order
-    seen = set()
-    unique_sources = []
-    for s in flat_sources:
-        u = s["url"]
-        if u and u not in seen:
-            unique_sources.append(s)
-            seen.add(u)
-    citations = [{"n": i + 1, "title": s["title"], "url": s["url"]} for i, s in enumerate(unique_sources)]
+    prompt = _build_prompt(symbols, sources_per_symbol)
+    client = AzureOpenAI(api_key=api_key, api_version=api_version, azure_endpoint=endpoint)
 
-    system_prompt = (
-        "You are a financial research analyst. Produce a thorough, factual, and impartial report covering:\n"
-        "- Company overview and recent developments\n"
-        "- Financials, growth, margins, balance sheet, cash flows\n"
-        "- Valuation (multiples, comps), catalysts, and risks\n"
-        "- Technical/price action context if material\n"
-        "Cite sources inline using bracketed numbers like [1], [2], ... referencing the bibliography.\n"
-        "Only cite when a claim comes from a specific source. Summaries and opinions should be clearly marked.\n"
-        "Write for a professional audience. Avoid hallucinations. If uncertain, state limitations."
-    )
+    try:
+        completion = client.chat.completions.create(
+            model=deployment,
+            messages=[
+                {"role": "system", "content": "You are a helpful financial research assistant."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.2,
+            max_tokens=2000,
+        )
+        text = (completion.choices[0].message.content or "").strip()
+        if not text:
+            # Guard rail
+            title, md, citations = _fallback_report(symbols, sources_per_symbol)
+            html = _md.render(md)
+            return {"title": title, "markdown": md, "html": html, "citations": citations}
 
-    sources_text_lines = []
-    for i, s in enumerate(unique_sources[:20], start=1):
-        sources_text_lines.append(f"[{i}] {s['title']} - {s['url']}\nExcerpt: {s['excerpt']}")
-    sources_text = "\n\n".join(sources_text_lines)
+        # Try to infer a title as first H1
+        title_line = next((line.strip("# ").strip() for line in text.splitlines() if line.startswith("# ")), None)
+        title = title_line or f"Stock Research Report: {', '.join(symbols)}"
+        md = text
+        html = _md.render(md)
 
-    user_prompt = (
-        f"Symbols: {', '.join(symbols)}\n\n"
-        "Use the following curated web excerpts to write a comprehensive multi-section report. "
-        "Include an executive summary at the top, then detailed sections. "
-        "Finish with a bibliography listing the numbered sources exactly as [n] Title - URL.\n\n"
-        f"Sources:\n{sources_text}"
-    )
-
-    resp = client.chat.completions.create(
-        model=Settings.AZURE_OPENAI_DEPLOYMENT,
-        temperature=0.2,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        max_tokens=3000,
-    )
-    content = (resp.choices[0].message.content or "").strip()
-
-    title = f"Stock Research Report: {', '.join(symbols)}"
-    html = _md_to_html(content)
-
-    return {
-        "title": title,
-        "markdown": content,
-        "html": html,
-        "citations": citations,
-    }
+        # Build naive citations list from sources we provided
+        citations: List[Dict[str, str]] = []
+        for entry in sources_per_symbol:
+            for s in entry.get("sources") or []:
+                u = s.get("url")
+                t = s.get("title") or "Source"
+                if u:
+                    citations.append({"title": t, "url": u})
+        return {"title": title, "markdown": md, "html": html, "citations": citations}
+    except Exception:
+        # On any error, fallback
+        title, md, citations = _fallback_report(symbols, sources_per_symbol)
+        html = _md.render(md)
+        return {"title": title, "markdown": md, "html": html, "citations": citations}
