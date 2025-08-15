@@ -134,3 +134,14 @@ def list_reports_for_user(user_id: str, schedule_id: Optional[str] = None, limit
     # Sort newest first by createdAt
     items.sort(key=lambda x: (x.get("createdAt") or ""), reverse=True)
     return items[: max(0, int(limit or 0)) or 50]
+
+def list_schedules_for_user(user_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    db = _ensure_store()
+    items: List[Dict[str, Any]] = []
+    for s in db.get("schedules", []):
+        if s.get("userId") != user_id:
+            continue
+        items.append(s)
+    # Sort newest first by createdAt
+    items.sort(key=lambda x: (x.get("createdAt") or ""), reverse=True)
+    return items[: max(0, int(limit or 0)) or 100]

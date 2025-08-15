@@ -1,0 +1,6 @@
+{
+  "symbols": ["AAPL", "MSFT"],
+  "recurrence": { "cadence": "hourly", "interval": 1 },
+  "email": { "to": [], "attachPdf": true },
+  "active": true
+}
