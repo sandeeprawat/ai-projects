@@ -318,6 +318,16 @@ function App() {
   const loginRef = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => { initGoogle(() => { setUser(getGoogleUser()); }, loginRef.current); }, []);
   const onLogout = () => { clearToken(); setUser(null); };
+  React.useEffect(() => {
+    const onAuthChanged = () => setUser(getGoogleUser());
+    const onStorage = (e: StorageEvent) => { if (e.key === "google_id_token") onAuthChanged(); };
+    window.addEventListener("auth:changed", onAuthChanged as any);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("auth:changed", onAuthChanged as any);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
 
   // Auth gate: block the UI for unauthenticated users
   if (!user) {
@@ -331,7 +341,7 @@ function App() {
           <div className="login-card">
             <h1>Welcome</h1>
             <p className="muted">Sign in with Google to continue.</p>
-            <div ref={loginRef}></div>
+            <div className="muted">Use the button in the header.</div>
           </div>
         </div>
       </div>

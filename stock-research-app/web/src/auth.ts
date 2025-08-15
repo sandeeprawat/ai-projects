@@ -26,10 +26,12 @@ export function getToken(): string | null {
 
 export function setToken(token: string) {
   localStorage.setItem(TOKEN_KEY, token);
+  window.dispatchEvent(new CustomEvent("auth:changed", { detail: { token } }));
 }
 
 export function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
+  window.dispatchEvent(new CustomEvent("auth:changed", { detail: { token: null } }));
 }
 
 export function decodeJwt(t: string | null | undefined): JwtClaims | null {
@@ -37,8 +39,9 @@ export function decodeJwt(t: string | null | undefined): JwtClaims | null {
   try {
     const parts = t.split(".");
     if (parts.length !== 3) return null;
-    const payload = parts[1];
-    const json = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    let payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    while (payload.length % 4) payload += "="; // pad for base64
+    const json = JSON.parse(atob(payload));
     return json as JwtClaims;
   } catch {
     return null;
@@ -64,7 +67,12 @@ export function initGoogle(onSignedIn?: () => void, renderInto?: HTMLElement | n
     const cred = resp?.credential;
     if (typeof cred === "string" && cred.length > 0) {
       setToken(cred);
-      onSignedIn?.();
+      try { onSignedIn?.(); } catch {}
+      // Ensure UI refresh after sign-in
+      if (!location.hash || location.hash === "#" || location.hash === "") {
+        location.hash = "/schedules";
+      }
+      setTimeout(() => location.reload(), 50);
     }
   };
 
