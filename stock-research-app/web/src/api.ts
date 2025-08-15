@@ -1,8 +1,14 @@
+import { getToken } from "./auth";
+
 export async function getJson<T = any>(path: string): Promise<T> {
   const url = path.startsWith("http") ? path : `/api${path.startsWith("/") ? path : `/${path}`}`;
+  const t = getToken();
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (t) headers["Authorization"] = `Bearer ${t}`;
+
   const res = await fetch(url, {
     method: "GET",
-    headers: { Accept: "application/json" },
+    headers,
     credentials: "include"
   });
   if (!res.ok) throw new Error(`GET ${url} failed: ${res.status} ${res.statusText}`);
@@ -11,9 +17,13 @@ export async function getJson<T = any>(path: string): Promise<T> {
 
 export async function postJson<T = any>(path: string, body: any): Promise<T> {
   const url = path.startsWith("http") ? path : `/api${path.startsWith("/") ? path : `/${path}`}`;
+  const t = getToken();
+  const headers: Record<string, string> = { Accept: "application/json", "Content-Type": "application/json" };
+  if (t) headers["Authorization"] = `Bearer ${t}`;
+
   const res = await fetch(url, {
     method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    headers,
     credentials: "include",
     body: JSON.stringify(body ?? {})
   });
@@ -41,6 +51,7 @@ export type EmailSettings = {
 export type Schedule = {
   id?: string;
   userId?: string;
+  prompt?: string;
   symbols: string[];
   recurrence: Recurrence;
   email: EmailSettings;
@@ -55,6 +66,7 @@ export type Report = {
   scheduleId: string;
   userId: string;
   title: string;
+  prompt?: string;
   symbols: string[];
   summary?: string | null;
   blobPaths: { md?: string; html?: string; pdf?: string };
@@ -69,13 +81,15 @@ export async function listSchedules(limit = 100): Promise<Schedule[]> {
 }
 
 export async function createSchedule(input: {
-  symbols: string[];
+  prompt: string;
+  symbols?: string[];
   recurrence: Recurrence;
   email: EmailSettings;
   active?: boolean;
 }): Promise<Schedule> {
   return postJson<Schedule>("/schedules", {
-    symbols: input.symbols,
+    prompt: input.prompt,
+    symbols: input.symbols ?? [],
     recurrence: input.recurrence,
     email: input.email,
     active: input.active ?? true

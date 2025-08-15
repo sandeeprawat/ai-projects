@@ -30,6 +30,7 @@ async def main(mytimer: func.TimerRequest, starter: str) -> None:
             schedule_id = sched.get("id")
             user_id = sched.get("userId")
             symbols = sched.get("symbols") or []
+            prompt = (sched.get("prompt") or "")
             email = sched.get("email") or {}
             email_to = email.get("to") or []
             attach_pdf = bool(email.get("attachPdf", False))
@@ -42,6 +43,7 @@ async def main(mytimer: func.TimerRequest, starter: str) -> None:
             orch_input: Dict[str, Any] = {
                 "scheduleId": schedule_id,
                 "symbols": symbols,
+                "prompt": prompt,
                 "runId": run_doc["id"],
                 "emailTo": email_to,
                 "userId": user_id,

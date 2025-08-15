@@ -19,15 +19,24 @@ def orchestrator_function(context: df.DurableOrchestrationContext):
     email_to = input_.get("emailTo", [])
     user_id = input_.get("userId")
     attach_pdf = bool(input_.get("attachPdf", False))
+    prompt = (input_.get("prompt") or "")
 
     sources_per_symbol = []
-    for s in symbols:
-        src = yield context.call_activity("fetch_context", {"symbol": s})
-        sources_per_symbol.append({"symbol": s, "sources": src})
+    if symbols:
+        for s in symbols:
+            src = yield context.call_activity("fetch_context", {"symbol": s})
+            sources_per_symbol.append({"symbol": s, "sources": src})
+    elif prompt:
+        src = yield context.call_activity("fetch_context", {"prompt": prompt})
+        sources_per_symbol.append({"prompt": prompt, "sources": src})
+    else:
+        # nothing to do
+        return {"status": "no-input", "reportId": None, "runId": run_id, "scheduleId": schedule_id}
 
     report = yield context.call_activity("synthesize_report", {
         "symbols": symbols,
-        "sources": sources_per_symbol
+        "sources": sources_per_symbol,
+        "prompt": prompt
     })
 
     saved = yield context.call_activity("save_report", {
@@ -37,6 +46,7 @@ def orchestrator_function(context: df.DurableOrchestrationContext):
         "emailTo": email_to,
         "userId": user_id,
         "symbols": symbols,
+        "prompt": prompt,
         "attachPdf": attach_pdf
     })
 

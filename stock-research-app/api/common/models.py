@@ -53,6 +53,7 @@ def compute_next_run_utc(rec: Recurrence, now: Optional[datetime] = None) -> str
 class Schedule(BaseModel):
     id: Optional[str] = None
     userId: str
+    prompt: Optional[str] = None
     symbols: List[str] = Field(default_factory=list)
     recurrence: Recurrence = Field(default_factory=Recurrence)
     email: EmailSettings = Field(default_factory=EmailSettings)
@@ -73,6 +74,7 @@ class Report(BaseModel):
     scheduleId: str
     userId: str
     title: str
+    prompt: Optional[str] = None
     symbols: List[str] = Field(default_factory=list)
     summary: Optional[str] = None
     blobPaths: Dict[str, str] = Field(default_factory=dict)

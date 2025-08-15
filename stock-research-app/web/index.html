@@ -1,9 +1,14 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Stock Research</title>
+    <!-- Expose Google Client ID to the SPA (safe to ship client_id) -->
+    <script>
+      window.__GOOGLE_CLIENT_ID__ = "446284060043-od8v9fo0gkq0dcqrcgvd0bf74virduuf.apps.googleusercontent.com";
+    </script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
     <div id="root"></div>

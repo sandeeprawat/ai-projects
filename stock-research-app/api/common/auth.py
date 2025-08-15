@@ -1,6 +1,7 @@
 import base64
 import json
 from typing import Optional, Dict
+from .google_auth import verify_google_id_token
 
 # Static Web Apps sends X-MS-CLIENT-PRINCIPAL with user info when using built-in auth.
 # For local dev, we fall back to a fixed dev user.
@@ -9,6 +10,18 @@ def get_user_context(headers: Dict[str, str]) -> Dict[str, Optional[str]]:
     """
     Returns a dict with keys: userId, name, provider.
     """
+    # First, try Authorization: Bearer (Google ID token for local/dev or custom frontends)
+    authz = None
+    for k, v in headers.items():
+        if k.lower() == "authorization":
+            authz = v
+            break
+    if authz and isinstance(authz, str) and authz.lower().startswith("bearer "):
+        token = authz.split(" ", 1)[1].strip()
+        user = verify_google_id_token(token)
+        if user:
+            return user
+
     principal_b64 = None
     # Headers can be case-insensitive; normalize access
     for k, v in headers.items():

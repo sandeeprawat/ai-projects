@@ -16,6 +16,7 @@ def main(input: Dict[str, Any]) -> Dict[str, Any]:
         "runId": str,
         "scheduleId": str,
         "userId": str,
+        "prompt": str?,
         "symbols": [str, ...],
         "report": {"title": str, "markdown": str, "html": str, "citations": [...]},
         "emailTo": [str, ...],
@@ -35,6 +36,7 @@ def main(input: Dict[str, Any]) -> Dict[str, Any]:
     schedule_id = input.get("scheduleId")
     user_id = input.get("userId") or "dev-user"
     symbols = input.get("symbols") or []
+    prompt = input.get("prompt") or None
     r = input.get("report") or {}
     title = r.get("title") or f"Stock Research Report"
     md = r.get("markdown") or ""
@@ -68,6 +70,7 @@ def main(input: Dict[str, Any]) -> Dict[str, Any]:
         scheduleId=schedule_id,
         userId=user_id,
         title=title,
+        prompt=prompt,
         symbols=symbols,
         summary=None,
         blobPaths=blob_paths,

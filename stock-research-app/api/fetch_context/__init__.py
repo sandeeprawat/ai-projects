@@ -6,14 +6,22 @@ from ..common import bing
 def main(input: Dict[str, Any]) -> List[Dict[str, str]]:
     """
     Activity: fetch_context
-    Input: {"symbol": "AAPL"}
+    Input:
+      - {"prompt": "detailed research prompt ..."} OR
+      - {"symbol": "AAPL"} (backward compatible)
     Output: [{"title": str, "url": str, "excerpt": str}, ...]
     """
-    symbol = (input or {}).get("symbol", "").strip()
-    if not symbol:
+    input = input or {}
+    prompt = (input.get("prompt") or "").strip()
+    symbol = (input.get("symbol") or "").strip()
+
+    if prompt:
+        query = prompt
+    elif symbol:
+        query = f"{symbol} stock latest news earnings financial results analysis"
+    else:
         return []
 
-    query = f"{symbol} stock latest news earnings financial results analysis"
     results = bing.web_search(query, top_k=6)
     sources: List[Dict[str, str]] = []
     for r in results:

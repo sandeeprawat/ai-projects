@@ -24,11 +24,12 @@ async def main(req: func.HttpRequest, starter: str) -> func.HttpResponse:
     user = get_user_context(dict(req.headers))
     user_id = user.get("userId") or "dev-user"
 
+    prompt: str = (body.get("prompt") or "").strip()
     symbols_raw: List[str] = body.get("symbols") or []
     symbols = [s.strip().upper() for s in symbols_raw if isinstance(s, str) and s.strip()]
-    if not symbols:
+    if not prompt and not symbols:
         return func.HttpResponse(
-            json.dumps({"error": "symbols is required and must be a non-empty array of strings"}),
+            json.dumps({"error": "prompt is required (or provide symbols for backward compatibility)"}),
             status_code=400,
             mimetype="application/json",
         )
@@ -51,6 +52,7 @@ async def main(req: func.HttpRequest, starter: str) -> func.HttpResponse:
 
     sched = Schedule(
         userId=user_id,
+        prompt=prompt,
         symbols=symbols,
         recurrence=recurrence,
         email=email,

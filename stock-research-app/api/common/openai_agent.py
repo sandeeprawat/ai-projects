@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 from markdown_it import MarkdownIt
 
 try:
@@ -13,11 +13,15 @@ from .config import Settings
 
 _md = MarkdownIt("commonmark")
 
-def _build_prompt(symbols: List[str], sources_per_symbol: List[Dict[str, Any]]) -> str:
+def _build_prompt(symbols: List[str], sources_per_symbol: List[Dict[str, Any]], user_prompt: Optional[str] = None) -> str:
     lines: List[str] = []
     lines.append("You are an equity research assistant. Create a concise but detailed research brief.")
     lines.append("")
-    lines.append(f"Symbols: {', '.join(symbols)}")
+    if user_prompt:
+        lines.append("User Research Prompt:")
+        lines.append(user_prompt)
+        lines.append("")
+    lines.append(f"Symbols: {', '.join(symbols)}" if symbols else "Symbols: (provided via prompt)")
     lines.append("")
     for entry in sources_per_symbol:
         sym = entry.get("symbol") or ""
@@ -34,13 +38,18 @@ def _build_prompt(symbols: List[str], sources_per_symbol: List[Dict[str, Any]]) 
     lines.append("Cite sources inline as [n] and provide a Citations list at the end with title + URL.")
     return "\n".join(lines)
 
-def _fallback_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any]]) -> Tuple[str, str, List[Dict[str, str]]]:
-    title = f"Stock Research Report: {', '.join(symbols) or 'N/A'}"
+def _fallback_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any]], user_prompt: Optional[str] = None) -> Tuple[str, str, List[Dict[str, str]]]:
+    title = f"Stock Research Report: {', '.join(symbols) or 'Prompted'}"
     citations: List[Dict[str, str]] = []
     idx = 1
     sections: List[str] = [f"# {title}", ""]
     sections.append("## Overview")
     sections.append("This is a locally generated summary (no Azure OpenAI configured).")
+    if user_prompt:
+        sections.append("")
+        sections.append("## User Prompt")
+        sections.append(user_prompt)
+        sections.append("")
     sections.append("")
     for entry in sources_per_symbol:
         sym = entry.get("symbol") or ""
@@ -63,7 +72,7 @@ def _fallback_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any]
     md = "\n".join(sections)
     return title, md, citations
 
-def synthesize_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any]]) -> Dict[str, Any]:
+def synthesize_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any]], user_prompt: Optional[str] = None) -> Dict[str, Any]:
     """
     Returns: {"title": str, "markdown": str, "html": str, "citations": [...]}
     """
@@ -74,11 +83,11 @@ def synthesize_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any
 
     # Fallback to offline summary if not configured
     if not (AzureOpenAI and api_key and endpoint and deployment):
-        title, md, citations = _fallback_report(symbols, sources_per_symbol)
+        title, md, citations = _fallback_report(symbols, sources_per_symbol, user_prompt)
         html = _md.render(md)
         return {"title": title, "markdown": md, "html": html, "citations": citations}
 
-    prompt = _build_prompt(symbols, sources_per_symbol)
+    prompt = _build_prompt(symbols, sources_per_symbol, user_prompt)
     client = AzureOpenAI(api_key=api_key, api_version=api_version, azure_endpoint=endpoint)
 
     try:
@@ -94,7 +103,7 @@ def synthesize_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any
         text = (completion.choices[0].message.content or "").strip()
         if not text:
             # Guard rail
-            title, md, citations = _fallback_report(symbols, sources_per_symbol)
+            title, md, citations = _fallback_report(symbols, sources_per_symbol, user_prompt)
             html = _md.render(md)
             return {"title": title, "markdown": md, "html": html, "citations": citations}
 
@@ -115,6 +124,6 @@ def synthesize_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any
         return {"title": title, "markdown": md, "html": html, "citations": citations}
     except Exception:
         # On any error, fallback
-        title, md, citations = _fallback_report(symbols, sources_per_symbol)
+        title, md, citations = _fallback_report(symbols, sources_per_symbol, user_prompt)
         html = _md.render(md)
         return {"title": title, "markdown": md, "html": html, "citations": citations}

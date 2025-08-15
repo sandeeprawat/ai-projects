@@ -34,6 +34,8 @@ import {
   type EmailSettings,
   type Report
 } from "./api";
+import { initGoogle, getUser as getGoogleUser, clearToken } from "./auth";
+import "./styles.css";
 
 /* Pages */
 function SchedulesPage() {
@@ -42,7 +44,8 @@ function SchedulesPage() {
   const [error, setError] = React.useState<string | null>(null);
 
   // form state
-  const [symbols, setSymbols] = React.useState("AAPL,MSFT");
+  const [prompt, setPrompt] = React.useState("Research the latest developments and outlook for AAPL and MSFT.");
+  const [symbols, setSymbols] = React.useState("");
   const [cadence, setCadence] = React.useState<"hourly" | "daily" | "weekly">("daily");
   const [interval, setInterval] = React.useState(1);
   const [hour, setHour] = React.useState(9);
@@ -69,6 +72,10 @@ function SchedulesPage() {
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!prompt.trim()) {
+      setError("Prompt is required");
+      return;
+    }
     try {
       const rec: Recurrence = { cadence, interval, hour, minute, weekday };
       const email: EmailSettings = {
@@ -76,12 +83,14 @@ function SchedulesPage() {
         attachPdf
       };
       await createSchedule({
+        prompt: prompt.trim(),
         symbols: symbols.split(",").map(s => s.trim().toUpperCase()).filter(Boolean),
         recurrence: rec,
         email,
         active: true
       });
-      setSymbols("AAPL,MSFT");
+      setPrompt("");
+      setSymbols("");
       await load();
       alert("Schedule created");
     } catch (e: any) {
@@ -99,13 +108,17 @@ function SchedulesPage() {
   }
 
   return (
-    <div style={{ padding: 16 }}>
+    <div className="page">
       <h2>Schedules</h2>
       {error && <div style={{ color: "crimson", marginBottom: 12 }}>{error}</div>}
 
-      <form onSubmit={onCreate} style={{ display: "grid", gap: 8, maxWidth: 720, marginBottom: 24 }}>
+      <form onSubmit={onCreate} className="card" style={{ display: "grid", gap: 8, maxWidth: 720, marginBottom: 24 }}>
         <label>
-          Symbols (comma-separated)
+          Research prompt (required)
+          <textarea value={prompt} onChange={e => setPrompt(e.target.value)} rows={5} style={{ width: "100%" }} />
+        </label>
+        <label>
+          Symbols (optional, comma-separated)
           <input value={symbols} onChange={e => setSymbols(e.target.value)} style={{ width: "100%" }} />
         </label>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -158,10 +171,10 @@ function SchedulesPage() {
 
       <div>
         {loading ? <div>Loading...</div> : null}
-        <table style={{ borderCollapse: "collapse", width: "100%" }}>
+        <table>
           <thead>
             <tr>
-              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: 8 }}>Symbols</th>
+              <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: 8 }}>Prompt / Symbols</th>
               <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: 8 }}>Cadence</th>
               <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: 8 }}>Next Run (UTC)</th>
               <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: 8 }}>Actions</th>
@@ -170,7 +183,7 @@ function SchedulesPage() {
           <tbody>
             {items.map(s => (
               <tr key={s.id}>
-                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{s.symbols?.join(", ")}</td>
+                <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{s.prompt ? s.prompt.slice(0, 80) : s.symbols?.join(", ")}</td>
                 <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{s.recurrence?.cadence} / {s.recurrence?.interval}</td>
                 <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{s.nextRunAt || "-"}</td>
                 <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
@@ -212,11 +225,11 @@ function ReportsPage() {
   React.useEffect(() => { void load(); }, [load]);
 
   return (
-    <div style={{ padding: 16 }}>
+    <div className="page">
       <h2>Reports {scheduleId ? `(Schedule ${scheduleId})` : ""}</h2>
       {error && <div style={{ color: "crimson", marginBottom: 12 }}>{error}</div>}
       {loading ? <div>Loading...</div> : null}
-      <table style={{ borderCollapse: "collapse", width: "100%" }}>
+      <table>
         <thead>
           <tr>
             <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: 8 }}>Title</th>
@@ -263,7 +276,7 @@ function ReportDetailPage(props: { reportId: string }) {
   }, [props.reportId]);
 
   return (
-    <div style={{ padding: 16 }}>
+    <div className="page">
       <h2>{report?.title || "Report"}</h2>
       {error && <div style={{ color: "crimson", marginBottom: 12 }}>{error}</div>}
       {loading ? <div>Loading...</div> : null}
@@ -301,6 +314,30 @@ function ReportDetailPage(props: { reportId: string }) {
 
 /* App shell + router */
 function App() {
+  const [user, setUser] = React.useState(() => getGoogleUser());
+  const loginRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => { initGoogle(() => { setUser(getGoogleUser()); }, loginRef.current); }, []);
+  const onLogout = () => { clearToken(); setUser(null); };
+
+  // Auth gate: block the UI for unauthenticated users
+  if (!user) {
+    return (
+      <div className="auth-shell">
+        <header className="app-header">
+          <strong>Stock Research</strong>
+          <div ref={loginRef}></div>
+        </header>
+        <div className="login-panel">
+          <div className="login-card">
+            <h1>Welcome</h1>
+            <p className="muted">Sign in with Google to continue.</p>
+            <div ref={loginRef}></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const hash = useHashLocation();
   const path = hash || "/schedules";
 
@@ -322,12 +359,24 @@ function App() {
 
   return (
     <div style={{ fontFamily: "system-ui, Segoe UI, Roboto, Arial, sans-serif" }}>
-      <header style={{ display: "flex", gap: 16, alignItems: "center", padding: "12px 16px", borderBottom: "1px solid #eee" }}>
-        <strong>Stock Research</strong>
-        <nav style={{ display: "flex", gap: 12 }}>
-          <Link to="/schedules">Schedules</Link>
-          <Link to="/reports">Reports</Link>
-        </nav>
+      <header className="app-header">
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+          <strong>Stock Research</strong>
+          <nav style={{ display: "flex", gap: 12 }}>
+            <Link to="/schedules">Schedules</Link>
+            <Link to="/reports">Reports</Link>
+          </nav>
+        </div>
+        <div>
+          {user ? (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span style={{ opacity: 0.8 }}>Signed in as {user.name}</span>
+              <button onClick={onLogout}>Logout</button>
+            </div>
+          ) : (
+            <div ref={loginRef}></div>
+          )}
+        </div>
       </header>
       <main>{matched}</main>
     </div>
