@@ -1,9 +1,11 @@
 {
-    "azureFunctions.deploySubpath": "stock-research-app",
+    // "azureFunctions.deploySubpath": "stock-research-app\\api",
     "azureFunctions.scmDoBuildDuringDeployment": true,
     "azureFunctions.pythonVenv": "${workspaceFolder}/stock-research-app/.venv",
     "azureFunctions.projectLanguage": "Python",
     "azureFunctions.projectRuntime": "~4",
     "debug.internalConsoleOptions": "neverOpen",
-    "python.defaultInterpreterPath": "${workspaceFolder}/stock-research-app/.venv/Scripts/python.exe"
+    "python.defaultInterpreterPath": "${workspaceFolder}/stock-research-app/.venv/Scripts/python.exe",
+    "vscode-nmake-tools.installRazzleSourcesFormatterExtension": false,
+    "vscode-nmake-tools.installOsRepoRustHelperExtension": false
 }

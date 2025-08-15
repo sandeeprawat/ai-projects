@@ -1,7 +1,7 @@
 {
   "version": "2.0.0",
   "tasks": [
-{
+    {
       "type": "shell",
       "label": "func: host start",
       "command": "func",
@@ -12,7 +12,6 @@
       "problemMatcher": "$func-python-watch",
       "isBackground": true,
       "dependsOn": [
-        "pip install (functions)"
       ],
       "dependsOrder": "sequence",
       "options": {
@@ -34,18 +33,15 @@
     {
       "label": "pip install (functions)",
       "type": "shell",
-      "osx": {
-        "command": "${config:azureFunctions.pythonVenv}/bin/python -m pip install -U pip setuptools wheel && ${config:azureFunctions.pythonVenv}/bin/python -m pip uninstall -y azure azure-storage azure-common azure-nspkg || true && ${config:azureFunctions.pythonVenv}/bin/python -m pip install -r requirements.txt"
-      },
       "windows": {
-        "command": "${config:azureFunctions.pythonVenv}\\Scripts\\python -m pip install -U pip setuptools wheel; ${config:azureFunctions.pythonVenv}\\Scripts\\python -m pip uninstall -y azure azure-storage azure-common azure-nspkg; ${config:azureFunctions.pythonVenv}\\Scripts\\python -m pip install -r requirements.txt"
+        "command": "${config:azureFunctions.pythonVenv}\\Scripts\\python -m pip install -U pip setuptools wheel; ${config:azureFunctions.pythonVenv}\\Scripts\\python -m pip uninstall -y azure azure-storage azure-common azure-nspkg; ${config:azureFunctions.pythonVenv}\\Scripts\\python -m pip install -r api\\requirements.txt"
       },
       "linux": {
-        "command": "${config:azureFunctions.pythonVenv}/bin/python -m pip install -U pip setuptools wheel && ${config:azureFunctions.pythonVenv}/bin/python -m pip uninstall -y azure azure-storage azure-common azure-nspkg || true && ${config:azureFunctions.pythonVenv}/bin/python -m pip install -r requirements.txt"
+        "command": "${config:azureFunctions.pythonVenv}/bin/python -m pip install -U pip setuptools wheel && ${config:azureFunctions.pythonVenv}/bin/python -m pip uninstall -y azure azure-storage azure-common azure-nspkg || true && ${config:azureFunctions.pythonVenv}/bin/python -m pip install -r api\\requirements.txt"
       },
       "problemMatcher": [],
       "options": {
-        "cwd": "${workspaceFolder}/stock-research-app\\api",
+        "cwd": "${workspaceFolder}/stock-research-app",
         "shell": {
           "executable": "powershell.exe",
           "args": [
@@ -78,6 +74,66 @@
         "clear": false
       },
       "problemMatcher": []
-    }
+    },
+    {
+      "label": "web: start (static on 5174)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "$ErrorActionPreference='Stop'; if (-not (Get-Command npx -ErrorAction SilentlyContinue)) { Write-Error 'Node.js/npm not found'; exit 1 }; npx serve -s . -l 5174"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/stock-research-app/web"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": false,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "web: start (vite dev)",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5174"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/stock-research-app/web"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": false,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "func: run via runfunc.cmd",
+      "type": "shell",
+      "command": ".\\runfunc.cmd",
+      "options": {
+        "cwd": "${workspaceFolder}/stock-research-app"
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": false,
+        "clear": false
+      },
+      "problemMatcher": "$func-python-watch"
+    }    
   ]
 }
