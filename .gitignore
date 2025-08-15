@@ -221,3 +221,4 @@ stock-research-app/web/.eslintcache
 # OS junk
 .DS_Store
 Thumbs.db
+stock-research-app/api/local.settings.json
