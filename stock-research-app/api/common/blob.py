@@ -105,3 +105,17 @@ def make_read_sas_url(container: str, blob_path: str, expiry_hours: int = 48) ->
         return f"{blob_endpoint}/{container}/{blob_path}?{sas}"
     except Exception:
         return None
+
+def delete_blob(container: str, blob_path: str) -> bool:
+    """
+    Deletes a blob if it exists. Returns True if deletion succeeded (or blob didn't exist),
+    False only on unexpected errors.
+    """
+    try:
+        svc = _svc()
+        bc = svc.get_blob_client(container=container, blob=blob_path)
+        bc.delete_blob(delete_snapshots="include")
+        return True
+    except Exception:
+        # Consider non-existent blob as success for idempotency
+        return False

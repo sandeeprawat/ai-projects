@@ -1,33 +1,83 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"type": "func",
-			"label": "func: host start",
-			"command": "host start",
-			"problemMatcher": "$func-python-watch",
-			"isBackground": true,
-			"dependsOn": "pip install (functions)",
-			"options": {
-				"cwd": "${workspaceFolder}/stock-research-app\\api"
-			}
-		},
-		{
-			"label": "pip install (functions)",
-			"type": "shell",
-			"osx": {
-				"command": "${config:azureFunctions.pythonVenv}/bin/python -m pip install -r requirements.txt"
-			},
-			"windows": {
-				"command": "${config:azureFunctions.pythonVenv}\\Scripts\\python -m pip install -r requirements.txt"
-			},
-			"linux": {
-				"command": "${config:azureFunctions.pythonVenv}/bin/python -m pip install -r requirements.txt"
-			},
-			"problemMatcher": [],
-			"options": {
-				"cwd": "${workspaceFolder}/stock-research-app\\api"
-			}
-		}
-	]
+  "version": "2.0.0",
+  "tasks": [
+{
+      "type": "shell",
+      "label": "func: host start",
+      "command": "func",
+      "args": [
+        "host",
+        "start"
+      ],
+      "problemMatcher": "$func-python-watch",
+      "isBackground": true,
+      "dependsOn": [
+        "pip install (functions)"
+      ],
+      "dependsOrder": "sequence",
+      "options": {
+        "cwd": "${workspaceFolder}/stock-research-app/api",
+        "env": {
+          "languageWorkers__python__defaultExecutablePath": "${workspaceFolder}\\stock-research-app\\.venv\\Scripts\\python.exe",
+          "languageWorkers__python__pythonPath": "${workspaceFolder}\\stock-research-app\\.venv\\Scripts\\python.exe",
+          "PYTHONPATH": "${workspaceFolder}\\stock-research-app\\.venv\\Lib\\site-packages",
+          "PATH": "${workspaceFolder}\\stock-research-app\\.venv\\Scripts;${env:PATH}"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": false,
+        "clear": false
+      }
+    },
+    {
+      "label": "pip install (functions)",
+      "type": "shell",
+      "osx": {
+        "command": "${config:azureFunctions.pythonVenv}/bin/python -m pip install -U pip setuptools wheel && ${config:azureFunctions.pythonVenv}/bin/python -m pip uninstall -y azure azure-storage azure-common azure-nspkg || true && ${config:azureFunctions.pythonVenv}/bin/python -m pip install -r requirements.txt"
+      },
+      "windows": {
+        "command": "${config:azureFunctions.pythonVenv}\\Scripts\\python -m pip install -U pip setuptools wheel; ${config:azureFunctions.pythonVenv}\\Scripts\\python -m pip uninstall -y azure azure-storage azure-common azure-nspkg; ${config:azureFunctions.pythonVenv}\\Scripts\\python -m pip install -r requirements.txt"
+      },
+      "linux": {
+        "command": "${config:azureFunctions.pythonVenv}/bin/python -m pip install -U pip setuptools wheel && ${config:azureFunctions.pythonVenv}/bin/python -m pip uninstall -y azure azure-storage azure-common azure-nspkg || true && ${config:azureFunctions.pythonVenv}/bin/python -m pip install -r requirements.txt"
+      },
+      "problemMatcher": [],
+      "options": {
+        "cwd": "${workspaceFolder}/stock-research-app\\api",
+        "shell": {
+          "executable": "powershell.exe",
+          "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command"
+          ]
+        }
+      }
+    },
+    {
+      "label": "Start Azurite (Blob/Queue/Table)",
+      "type": "shell",
+      "command": "azurite",
+      "args": [
+        "--silent",
+        "--location",
+        "${workspaceFolder}/stock-research-app/.data/azurite",
+        "--debug",
+        "${workspaceFolder}/stock-research-app/.data/azurite/debug.log"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": false,
+        "clear": false
+      },
+      "problemMatcher": []
+    }
+  ]
 }

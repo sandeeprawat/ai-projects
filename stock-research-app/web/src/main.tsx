@@ -29,6 +29,8 @@ import {
   runScheduleNow,
   listReports,
   getReport,
+  deleteReport,
+  deleteSchedule,
   type Schedule,
   type Recurrence,
   type EmailSettings,
@@ -102,6 +104,18 @@ function SchedulesPage() {
     try {
       await runScheduleNow(id);
       alert("Run started");
+    } catch (e: any) {
+      alert(e?.message || String(e));
+    }
+  }
+
+  async function onDeleteSchedule(id: string) {
+    if (!id) return;
+    if (!confirm("Delete this schedule and all its reports?")) return;
+    try {
+      await deleteSchedule(id);
+      await load();
+      alert("Schedule deleted");
     } catch (e: any) {
       alert(e?.message || String(e));
     }
@@ -188,7 +202,8 @@ function SchedulesPage() {
                 <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{s.nextRunAt || "-"}</td>
                 <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
                   {s.id && <button onClick={() => onRunNow(s.id!)}>Run Now</button>}{" "}
-                  {s.id && <Link to={`/reports?scheduleId=${encodeURIComponent(s.id)}`}>View Reports</Link>}
+                  {s.id && <Link to={`/reports?scheduleId=${encodeURIComponent(s.id)}`}>View Reports</Link>}{" "}
+                  {s.id && <button onClick={() => onDeleteSchedule(s.id!)} style={{ color: "crimson" }}>Delete</button>}
                 </td>
               </tr>
             ))}
@@ -223,6 +238,18 @@ function ReportsPage() {
   }, [scheduleId]);
 
   React.useEffect(() => { void load(); }, [load]);
+  
+  async function onDeleteReport(id: string) {
+    if (!id) return;
+    if (!confirm("Delete this report?")) return;
+    try {
+      await deleteReport(id);
+      await load();
+      alert("Report deleted");
+    } catch (e: any) {
+      alert(e?.message || String(e));
+    }
+  }
 
   return (
     <div className="page">
@@ -235,7 +262,7 @@ function ReportsPage() {
             <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: 8 }}>Title</th>
             <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: 8 }}>Symbols</th>
             <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: 8 }}>Created</th>
-            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: 8 }}>Open</th>
+            <th style={{ textAlign: "left", borderBottom: "1px solid #ddd", padding: 8 }}>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -245,7 +272,8 @@ function ReportsPage() {
               <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{r.symbols?.join(", ")}</td>
               <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>{r.createdAt || "-"}</td>
               <td style={{ padding: 8, borderBottom: "1px solid #eee" }}>
-                <Link to={`/report/${encodeURIComponent(r.id)}`}>View</Link>
+                <Link to={`/report/${encodeURIComponent(r.id)}`}>View</Link>{" "}
+                <button onClick={() => onDeleteReport(r.id)} style={{ color: "crimson" }}>Delete</button>
               </td>
             </tr>
           ))}
@@ -285,7 +313,7 @@ function ReportDetailPage(props: { reportId: string }) {
         <div style={{ display: "grid", gap: 8 }}>
           <div>Symbols: {report.symbols?.join(", ") || "-" }</div>
           <div>Created: {report.createdAt || "-" }</div>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
             {report.signedUrls?.html && (
               <a href={report.signedUrls.html} target="_blank" rel="noreferrer">Open HTML</a>
             )}
@@ -295,6 +323,22 @@ function ReportDetailPage(props: { reportId: string }) {
             {report.signedUrls?.pdf && (
               <a href={report.signedUrls.pdf} target="_blank" rel="noreferrer">Download PDF</a>
             )}
+            <button
+              onClick={async () => {
+                if (report && confirm("Delete this report?")) {
+                  try {
+                    await deleteReport(report.id);
+                    location.hash = "/reports";
+                    setTimeout(() => location.reload(), 50);
+                  } catch (e: any) {
+                    alert(e?.message || String(e));
+                  }
+                }
+              }}
+              style={{ color: "crimson" }}
+            >
+              Delete Report
+            </button>
           </div>
           {Array.isArray(report.citations) && report.citations.length > 0 && (
             <div>

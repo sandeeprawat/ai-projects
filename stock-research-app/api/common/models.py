@@ -66,6 +66,7 @@ class Run(BaseModel):
     scheduleId: str
     userId: str
     createdAt: Optional[str] = None
+    status: str = "scheduled"
 
 
 class Report(BaseModel):
@@ -79,4 +80,5 @@ class Report(BaseModel):
     summary: Optional[str] = None
     blobPaths: Dict[str, str] = Field(default_factory=dict)
     citations: List[Dict[str, Any]] = Field(default_factory=list)
+    status: str = "complete"
     createdAt: Optional[str] = None

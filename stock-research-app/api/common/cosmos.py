@@ -145,3 +145,68 @@ def list_schedules_for_user(user_id: str, limit: int = 100) -> List[Dict[str, An
     # Sort newest first by createdAt
     items.sort(key=lambda x: (x.get("createdAt") or ""), reverse=True)
     return items[: max(0, int(limit or 0)) or 100]
+
+# Deletions and utilities
+
+def delete_report(report_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Deletes a report document for a user. Returns the removed report doc, or None if not found.
+    """
+    db = _ensure_store()
+    reports = db.get("reports", [])
+    deleted: Optional[Dict[str, Any]] = None
+    kept: List[Dict[str, Any]] = []
+    for r in reports:
+        if r.get("id") == report_id and r.get("userId") == user_id:
+            deleted = r
+        else:
+            kept.append(r)
+    if deleted is None:
+        return None
+    db["reports"] = kept
+    _save_store(db)
+    return deleted
+
+def delete_runs_for_schedule(schedule_id: str, user_id: str) -> int:
+    """
+    Deletes all run docs for a schedule/user. Returns number of deleted runs.
+    """
+    db = _ensure_store()
+    runs = db.get("runs", [])
+    kept: List[Dict[str, Any]] = []
+    deleted = 0
+    for r in runs:
+        if r.get("scheduleId") == schedule_id and r.get("userId") == user_id:
+            deleted += 1
+        else:
+            kept.append(r)
+    db["runs"] = kept
+    _save_store(db)
+    return deleted
+
+def delete_schedule(schedule_id: str, user_id: str) -> bool:
+    """
+    Deletes a schedule for a user. Returns True if deleted, False if not found.
+    Does not cascade delete reports/blobs; callers should do that explicitly.
+    """
+    db = _ensure_store()
+    schedules = db.get("schedules", [])
+    kept: List[Dict[str, Any]] = []
+    deleted = False
+    for s in schedules:
+        if s.get("id") == schedule_id and s.get("userId") == user_id:
+            deleted = True
+        else:
+            kept.append(s)
+    if not deleted:
+        return False
+    db["schedules"] = kept
+    _save_store(db)
+    return True
+
+def list_all_reports() -> List[Dict[str, Any]]:
+    """
+    Returns all reports across users (for cleanup/maintenance tasks).
+    """
+    db = _ensure_store()
+    return list(db.get("reports", []))

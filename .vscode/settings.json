@@ -1,8 +1,9 @@
 {
     "azureFunctions.deploySubpath": "stock-research-app",
     "azureFunctions.scmDoBuildDuringDeployment": true,
-    "azureFunctions.pythonVenv": ".venv",
+    "azureFunctions.pythonVenv": "${workspaceFolder}/stock-research-app/.venv",
     "azureFunctions.projectLanguage": "Python",
     "azureFunctions.projectRuntime": "~4",
-    "debug.internalConsoleOptions": "neverOpen"
+    "debug.internalConsoleOptions": "neverOpen",
+    "python.defaultInterpreterPath": "${workspaceFolder}/stock-research-app/.venv/Scripts/python.exe"
 }

@@ -34,6 +34,25 @@ export async function postJson<T = any>(path: string, body: any): Promise<T> {
   return (await res.json()) as T;
 }
 
+export async function delJson<T = any>(path: string): Promise<T> {
+  const url = path.startsWith("http") ? path : `/api${path.startsWith("/") ? path : `/${path}`}`;
+  const t = getToken();
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (t) headers["Authorization"] = `Bearer ${t}`;
+
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers,
+    credentials: "include"
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`DELETE ${url} failed: ${res.status} ${res.statusText} ${text}`);
+  }
+  const txt = await res.text();
+  return (txt ? JSON.parse(txt) : ({} as any)) as T;
+}
+
 /* Domain helpers (types are lightweight to avoid extra imports) */
 export type Recurrence = {
   cadence: "hourly" | "daily" | "weekly";
@@ -110,4 +129,12 @@ export async function listReports(opts?: { scheduleId?: string; limit?: number }
 
 export async function getReport(reportId: string): Promise<Report> {
   return getJson<Report>(`/reports/${encodeURIComponent(reportId)}`);
+}
+
+export async function deleteReport(reportId: string): Promise<{ deleted: boolean; reportId: string }> {
+  return delJson<{ deleted: boolean; reportId: string }>(`/reports/${encodeURIComponent(reportId)}`);
+}
+
+export async function deleteSchedule(scheduleId: string): Promise<{ deleted: boolean; scheduleId: string }> {
+  return delJson<{ deleted: boolean; scheduleId: string }>(`/schedules/${encodeURIComponent(scheduleId)}`);
 }
