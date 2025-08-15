@@ -205,3 +205,19 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project-specific ignores
+# Azure Functions local
+stock-research-app/api/local.settings.json
+stock-research-app/.data/
+stock-research-app/.venv/
+
+# Node/Vite web app
+stock-research-app/web/node_modules/
+stock-research-app/web/dist/
+stock-research-app/web/.vite/
+stock-research-app/web/.eslintcache
+
+# OS junk
+.DS_Store
+Thumbs.db
