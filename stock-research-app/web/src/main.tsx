@@ -1,97 +1,101 @@
+import { getUser, initGoogle, clearToken, getToken } from "./auth";
 import { renderReports } from "./pages/reports";
 import { renderSchedules } from "./pages/schedules";
-import { initGoogle, getUser, clearToken } from "./auth";
 
-function qs<T extends HTMLElement = HTMLElement>(root: ParentNode | null, sel: string) {
-  return (root ? root.querySelector(sel) : null) as T | null;
+function appShell() {
+  const el = document.getElementById("root")!;
+  el.innerHTML = `
+    <div class="app">
+      <div class="topbar">
+        <div class="brand">
+          <span class="dot"></span>
+          <span>Stock Research</span>
+        </div>
+        <nav class="nav">
+          <a href="#/schedules" id="nav-schedules">Schedules</a>
+          <a href="#/reports" id="nav-reports">Reports</a>
+        </nav>
+        <div id="userArea" style="display:flex;align-items:center;gap:10px;"></div>
+      </div>
+      <main class="main">
+        <div id="pageRoot"></div>
+      </main>
+    </div>
+  `;
 }
 
-function buildShell() {
-  const root = document.getElementById("root");
-  if (!root) return;
-
-  if (!qs(root, ".topbar")) {
-    root.innerHTML = `
-      <header class="topbar" style="display:flex;align-items:center;gap:16px;padding:8px 12px;border-bottom:1px solid #eee;">
-        <div class="brand" style="font-weight:600;">Stock Research</div>
-        <nav class="nav" style="display:flex;gap:12px;">
-          <a href="#/reports" data-link>Reports</a>
-          <a href="#/schedules" data-link>Schedules</a>
-        </nav>
-        <div style="flex:1 1 auto;"></div>
-        <div class="auth" style="display:flex;align-items:center;gap:8px;">
-          <div id="googleBtn"></div>
-          <div id="userArea" class="user-area" style="display:none;align-items:center;gap:8px;">
-            <img id="userPic" alt="avatar" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;" />
-            <span id="userName"></span>
-            <button id="signOutBtn" class="link" title="Sign out" style="background:none;border:none;color:#06c;cursor:pointer;">Sign out</button>
-          </div>
-        </div>
-      </header>
-      <main id="pageRoot" class="page-root"></main>
-    `;
-
-    const signOutBtn = qs<HTMLButtonElement>(root, "#signOutBtn");
-    signOutBtn?.addEventListener("click", () => clearToken());
-
-    const googleBtn = qs<HTMLElement>(root, "#googleBtn");
-    initGoogle(updateAuthUI, googleBtn || null);
-
-    updateAuthUI();
-    window.addEventListener("auth:changed" as any, updateAuthUI as any);
+function setActiveNav() {
+  const hash = location.hash || "#/schedules";
+  const navs = [
+    { id: "nav-schedules", href: "#/schedules" },
+    { id: "nav-reports", href: "#/reports" }
+  ];
+  for (const n of navs) {
+    const a = document.getElementById(n.id) as HTMLAnchorElement | null;
+    if (!a) continue;
+    a.classList.toggle("active", hash.startsWith(n.href));
   }
 }
 
-function updateAuthUI() {
-  const root = document.getElementById("root");
-  if (!root) return;
+function requireAuthNotice(container: HTMLElement) {
+  container.innerHTML = `
+    <div class="card">
+      <h3 style="margin-top:0;">Sign-in required</h3>
+      <p>Please sign in with Google to use the app.</p>
+      <div id="gsiBtn"></div>
+    </div>
+  `;
+  const host = container.querySelector("#gsiBtn") as HTMLElement | null;
+  initGoogle(() => {}, host || undefined);
+}
 
+function renderUserArea() {
+  const area = document.getElementById("userArea")!;
   const user = getUser();
-  const userArea = qs<HTMLDivElement>(root, "#userArea");
-  const googleBtn = qs<HTMLDivElement>(root, "#googleBtn");
-  const userName = qs<HTMLSpanElement>(root, "#userName");
-  const userPic = qs<HTMLImageElement>(root, "#userPic");
-
+  area.innerHTML = "";
   if (user) {
-    if (userArea) userArea.style.display = "flex";
-    if (googleBtn) googleBtn.style.display = "none";
-    if (userName) userName.textContent = user.name || user.email || user.id || "User";
-    if (userPic) {
-      if (user.picture) {
-        userPic.src = user.picture;
-        userPic.style.display = "";
-      } else {
-        userPic.style.display = "none";
-      }
-    }
+    const avatar = user.picture ? `<img src="${user.picture}" alt="" style="width:24px;height:24px;border-radius:50%;">` : "";
+    area.innerHTML = `
+      <span style="color:#cbd5e1;">${avatar ? avatar : ""} ${user.name || user.email}</span>
+      <button id="signOutBtn" class="secondary">Sign out</button>
+    `;
+    const btn = area.querySelector("#signOutBtn") as HTMLButtonElement | null;
+    btn?.addEventListener("click", () => clearToken());
   } else {
-    if (userArea) userArea.style.display = "none";
-    if (googleBtn) googleBtn.style.display = "";
+    area.innerHTML = `<div id="gsiBtnTop"></div>`;
+    const host = area.querySelector("#gsiBtnTop") as HTMLElement | null;
+    initGoogle(() => {}, host || undefined);
   }
 }
 
 function route() {
-  buildShell();
+  setActiveNav();
+  renderUserArea();
+  const token = getToken();
+  const pageRoot = document.getElementById("pageRoot")!;
+  const hash = location.hash || "#/schedules";
 
-  const pageRoot = document.getElementById("pageRoot") as HTMLElement | null;
-  if (!pageRoot) return;
+  if (!token) {
+    // Allow viewing shell but block pages until signed-in
+    requireAuthNotice(pageRoot);
+    return;
+  }
 
-  const path = (location.hash || "").replace(/^#/, "") || "/reports";
-  switch (true) {
-    case path === "/reports": {
-      renderReports(pageRoot);
-      break;
-    }
-    case path === "/schedules": {
-      renderSchedules(pageRoot);
-      break;
-    }
-    default: {
-      renderReports(pageRoot);
-    }
+  // Render requested page
+  if (hash.startsWith("#/reports")) {
+    renderReports(pageRoot);
+  } else {
+    renderSchedules(pageRoot);
   }
 }
 
-window.addEventListener("hashchange", route);
-window.addEventListener("DOMContentLoaded", route);
-route();
+function boot() {
+  appShell();
+  renderUserArea();
+  route();
+  window.addEventListener("hashchange", route);
+  window.addEventListener("auth:changed", route as any);
+}
+
+// Start
+boot();

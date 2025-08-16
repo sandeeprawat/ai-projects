@@ -34,6 +34,25 @@ export async function postJson<T = any>(path: string, body: any): Promise<T> {
   return (await res.json()) as T;
 }
 
+export async function putJson<T = any>(path: string, body: any): Promise<T> {
+  const url = path.startsWith("http") ? path : `/api${path.startsWith("/") ? path : `/${path}`}`;
+  const t = getToken();
+  const headers: Record<string, string> = { Accept: "application/json", "Content-Type": "application/json" };
+  if (t) headers["Authorization"] = `Bearer ${t}`;
+
+  const res = await fetch(url, {
+    method: "PUT",
+    headers,
+    credentials: "include",
+    body: JSON.stringify(body ?? {})
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`PUT ${url} failed: ${res.status} ${res.statusText} ${text}`);
+  }
+  return (await res.json()) as T;
+}
+
 export async function delJson<T = any>(path: string): Promise<T> {
   const url = path.startsWith("http") ? path : `/api${path.startsWith("/") ? path : `/${path}`}`;
   const t = getToken();
@@ -107,6 +126,19 @@ export async function createSchedule(input: {
   active?: boolean;
 }): Promise<Schedule> {
   return postJson<Schedule>("/schedules", {
+    prompt: input.prompt,
+    symbols: input.symbols ?? [],
+    recurrence: input.recurrence,
+    email: input.email,
+    active: input.active ?? true
+  });
+}
+
+export async function updateSchedule(
+  scheduleId: string,
+  input: { prompt: string; symbols?: string[]; recurrence: Recurrence; email: EmailSettings; active?: boolean }
+): Promise<Schedule> {
+  return putJson<Schedule>(`/schedules/${encodeURIComponent(scheduleId)}`, {
     prompt: input.prompt,
     symbols: input.symbols ?? [],
     recurrence: input.recurrence,
