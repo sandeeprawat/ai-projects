@@ -23,6 +23,15 @@ except Exception:
         AIProjectsClient = _AIProjectsClient  # type: ignore
     except Exception:  # pragma: no cover
         AIProjectsClient = None  # type: ignore
+# Try to import agent thread/run models for create_thread_and_process_run
+try:
+    from azure.ai.agents.models import AgentThreadCreationOptions, ThreadMessageOptions, ListSortOrder, MessageTextContent  # type: ignore
+except Exception:  # pragma: no cover
+    AgentThreadCreationOptions = None  # type: ignore
+    ThreadMessageOptions = None  # type: ignore
+    ListSortOrder = None  # type: ignore
+    MessageTextContent = None  # type: ignore
+
 import time
 import os
 from .config import Settings
@@ -97,46 +106,62 @@ def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str
             text = ""
             if hasattr(client, "agents"):
                 try:
-                    logger.info("ai_projects: calling create_response on agent_id=%s", agent_id)
-                    resp = client.agents.create_response(agent_id=agent_id, input=prompt)  # type: ignore[attr-defined]
-                    text = getattr(resp, "output_text", None) or getattr(resp, "content", None) or ""
-                except Exception as e:
-                    logger.warning("ai_projects: create_response failed: %s; falling back to session flow", repr(e))
-                    # Try session-based flow if available (best-effort)
+                    thread_payload = AgentThreadCreationOptions(
+                        messages=[ThreadMessageOptions(role="user", content=prompt)]
+                    ) if (AgentThreadCreationOptions and ThreadMessageOptions) else {
+                        "messages": [{"role": "user", "content": prompt}]
+                    }
+                    logger.info("ai_projects: calling agents.create_thread_and_process_run on agent_id=%s", agent_id)
+                    run = client.agents.create_thread_and_process_run(  # type: ignore[attr-defined]
+                        agent_id=agent_id,
+                        thread=thread_payload,
+                    )
+                    # Collect all assistant messages from the completed thread
+                    text = ""
                     try:
-                        session = client.agents.create_session(agent_id=agent_id)  # type: ignore[attr-defined]
-                        logger.info("ai_projects: created session id=%s", getattr(session, "id", None))
-                        client.agents.send_message(session_id=getattr(session, "id", None), role="user", content=prompt)  # type: ignore[attr-defined]
-                        logger.debug("ai_projects: sent user message; polling for assistant messages")
-                        # naive polling for a composed output if SDK provides it
-                        for _ in range(30):
-                            try:
-                                msgs = client.agents.list_messages(session_id=getattr(session, "id", None))  # type: ignore[attr-defined]
-                                # attempt to gather assistant messages
-                                latest = ""
-                                for m in getattr(msgs, "data", []) or []:
-                                    if getattr(m, "role", "") == "assistant":
-                                        val = getattr(getattr(m, "content", None), "text", None) or getattr(m, "content", None) or ""
-                                        if isinstance(val, str) and val.strip():
-                                            latest = val
-                                            break
-                                if latest:
-                                    text = latest
-                                    break
-                            except Exception:
-                                pass
-                            time.sleep(1)
-                    except Exception as e2:
-                        logger.warning("ai_projects: session flow failed: %s", repr(e2))
-            else:
-                # AgentsClient surface (azure-ai-agents)
-                try:
-                    logger.info("ai_projects: agents.create_thread_and_run on agent_id=%s", agent_id)
-                    resp = client.create_thread_and_run(agent_id=agent_id, input=prompt)  # type: ignore[attr-defined]
-                    text = getattr(resp, "output_text", None) or getattr(resp, "content", None) or ""
+                        messages = client.agents.messages.list(  # type: ignore[attr-defined]
+                            thread_id=getattr(run, "thread_id", None),
+                            order=(ListSortOrder.ASCENDING if ListSortOrder else None),
+                        )
+                        collected: List[str] = []
+                        for msg in messages:
+                            if getattr(msg, "role", "") != "assistant":
+                                continue
+                            # text_messages container support
+                            if hasattr(msg, "text_messages") and msg.text_messages:
+                                for t in msg.text_messages:
+                                    try:
+                                        val = getattr(getattr(t, "text", None), "value", "") or ""
+                                        if val:
+                                            collected.append(val)
+                                    except Exception:
+                                        pass
+                            # generic content parts
+                            for part in getattr(msg, "content", []) or []:
+                                try:
+                                    if (MessageTextContent is not None) and isinstance(part, MessageTextContent):
+                                        val = getattr(getattr(part, "text", None), "value", "") or ""
+                                    else:
+                                        val = ""
+                                        try:
+                                            val = part.get("text", {}).get("value", "")
+                                        except Exception:
+                                            if isinstance(part, str):
+                                                val = part
+                                    if val:
+                                        collected.append(val)
+                                except Exception:
+                                    pass
+                        if collected:
+                            text = "\n".join(collected).strip()
+                        if not text:
+                            text = getattr(run, "output_text", None) or getattr(run, "content", None) or ""
+                    except Exception as _e_list:
+                        logger.debug("ai_projects: listing messages failed: %s", repr(_e_list))
+                        text = getattr(run, "output_text", None) or getattr(run, "content", None) or ""
                 except Exception as e:
-                    logger.warning("ai_projects: create_thread_and_run failed: %s", repr(e))
-
+                    logger.warning("ai_projects: create_thread_and_process_run path failed: %s", repr(e))
+            
             if not isinstance(text, str) or not text.strip():
                 raise RuntimeError("Empty agent response")
 
