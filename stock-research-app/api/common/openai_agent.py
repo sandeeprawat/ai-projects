@@ -10,15 +10,39 @@ except Exception:  # pragma: no cover
     AzureOpenAI = None  # type: ignore
 
 from azure.identity import DefaultAzureCredential  # type: ignore
+# Try multiple SDK import variants to support newer packages
+AIProjectsClient = None  # type: ignore
 try:
-    from azure.ai.projects import AIProjectsClient  # type: ignore
-except Exception:  # pragma: no cover
-    AIProjectsClient = None  # type: ignore
+    # Newer azure-ai-projects exposes AIProjectClient (singular)
+    from azure.ai.projects import AIProjectClient as _AIProjectsClient  # type: ignore
+    AIProjectsClient = _AIProjectsClient  # type: ignore
+except Exception:
+    try:
+        # azure-ai-agents exposes AgentsClient with a compatible endpoint/credential signature
+        from azure.ai.agents import AgentsClient as _AIProjectsClient  # type: ignore
+        AIProjectsClient = _AIProjectsClient  # type: ignore
+    except Exception:  # pragma: no cover
+        AIProjectsClient = None  # type: ignore
 import time
+import os
 from .config import Settings
 
 import logging
 logger = logging.getLogger("stock.openai_agent")
+logger.info("openai_agent: availability - AIProjectsClient=%s, AzureOpenAI=%s", bool(AIProjectsClient), bool(AzureOpenAI))
+# Log installed azure-ai-projects version for diagnostics
+try:
+    import azure.ai.projects as _ai_projects_mod  # type: ignore
+    logger.info("azure-ai-projects version: %s", getattr(_ai_projects_mod, "__version__", "unknown"))
+except Exception as _e:
+    logger.info("azure-ai-projects version: unavailable (%s)", repr(_e))
+
+# Log which client symbol we resolved to (AIProjectClient vs AgentsClient)
+try:
+    _client_name = getattr(AIProjectsClient, "__name__", None)
+    logger.info("ai_projects: resolved client symbol: %s", _client_name)
+except Exception:
+    pass
 
 _md = MarkdownIt("commonmark")
 
@@ -34,47 +58,84 @@ def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str
     projects_endpoint = getattr(Settings, "AZURE_AI_PROJECTS_ENDPOINT", "")
     projects_project = getattr(Settings, "AZURE_AI_PROJECTS_PROJECT", "")
     agent_id = getattr(Settings, "AZURE_AI_PROJECTS_AGENT_ID", "")
+    logger.info(
+        "ai_projects gating: client=%s endpoint_set=%s project_set=%s agent_set=%s",
+        bool(AIProjectsClient), bool(projects_endpoint), bool(projects_project), bool(agent_id)
+    )
+    # Extra diagnostics to trace why agent_set might be False
+    try:
+        logger.info("ai_projects Settings values: endpoint=%r project=%r agent_id=%r", projects_endpoint, projects_project, agent_id)
+        _env_ep = os.getenv("AZURE_AI_PROJECTS_ENDPOINT")
+        _env_pr = os.getenv("AZURE_AI_PROJECTS_PROJECT")
+        _env_ag = os.getenv("AZURE_AI_PROJECTS_AGENT_ID")
+        logger.info("ai_projects os.getenv values: endpoint=%r project=%r agent_id=%r", _env_ep, _env_pr, _env_ag)
+        _keys = [k for k in os.environ.keys() if k.startswith("AZURE_AI_PROJECTS")]
+        logger.info("ai_projects env keys present: %s", _keys)
+    except Exception as _e:
+        logger.info("ai_projects env dump failed: %s", repr(_e))
+    if not (AIProjectsClient and projects_endpoint and projects_project and agent_id):
+        logger.info(
+            "ai_projects not used: client=%s endpoint_set=%s project_set=%s agent_set=%s",
+            bool(AIProjectsClient), bool(projects_endpoint), bool(projects_project), bool(agent_id)
+        )
     if AIProjectsClient and projects_endpoint and projects_project and agent_id:
         logger.info("openai_agent: using Azure AI Projects Agents path")
         try:
+            logger.info("ai_projects: creating DefaultAzureCredential and AIProjectsClient (endpoint=%s, project_set=%s)", projects_endpoint, bool(projects_project))
             cred = DefaultAzureCredential(exclude_interactive_browser_credential=False)
-            client = AIProjectsClient(endpoint=projects_endpoint, credential=cred, project=projects_project)  # type: ignore
-            # Validate agent exists
-            agent = client.agents.get_agent(agent_id=agent_id)  # type: ignore[attr-defined]
+            client = AIProjectsClient(endpoint=projects_endpoint, credential=cred)  # type: ignore
+            # Validate agent exists for either SDK surface
+            if hasattr(client, "agents"):
+                agent = client.agents.get_agent(agent_id=agent_id)  # type: ignore[attr-defined]
+            else:
+                agent = client.get_agent(agent_id=agent_id)  # type: ignore[attr-defined]
+            logger.info("ai_projects: got agent response (id=%s)", getattr(agent, "id", None))
             if not getattr(agent, "id", None):
                 raise RuntimeError("Agent not found")
 
-            # Try simple one-shot response
-            # Recent SDKs expose create_response(agent_id=..., input=...)
-            try:
-                resp = client.agents.create_response(agent_id=agent_id, input=prompt)  # type: ignore[attr-defined]
-                text = getattr(resp, "output_text", None) or getattr(resp, "content", None) or ""
-            except Exception:
-                # Try session-based flow if available (best-effort)
-                text = ""
+            # Try simple one-shot response using available surface
+            text = ""
+            if hasattr(client, "agents"):
                 try:
-                    session = client.agents.create_session(agent_id=agent_id)  # type: ignore[attr-defined]
-                    client.agents.send_message(session_id=getattr(session, "id", None), role="user", content=prompt)  # type: ignore[attr-defined]
-                    # naive polling for a composed output if SDK provides it
-                    for _ in range(30):
-                        try:
-                            msgs = client.agents.list_messages(session_id=getattr(session, "id", None))  # type: ignore[attr-defined]
-                            # attempt to gather assistant messages
-                            latest = ""
-                            for m in getattr(msgs, "data", []) or []:
-                                if getattr(m, "role", "") == "assistant":
-                                    val = getattr(getattr(m, "content", None), "text", None) or getattr(m, "content", None) or ""
-                                    if isinstance(val, str) and val.strip():
-                                        latest = val
-                                        break
-                            if latest:
-                                text = latest
-                                break
-                        except Exception:
-                            pass
-                        time.sleep(1)
-                except Exception:
-                    pass
+                    logger.info("ai_projects: calling create_response on agent_id=%s", agent_id)
+                    resp = client.agents.create_response(agent_id=agent_id, input=prompt)  # type: ignore[attr-defined]
+                    text = getattr(resp, "output_text", None) or getattr(resp, "content", None) or ""
+                except Exception as e:
+                    logger.warning("ai_projects: create_response failed: %s; falling back to session flow", repr(e))
+                    # Try session-based flow if available (best-effort)
+                    try:
+                        session = client.agents.create_session(agent_id=agent_id)  # type: ignore[attr-defined]
+                        logger.info("ai_projects: created session id=%s", getattr(session, "id", None))
+                        client.agents.send_message(session_id=getattr(session, "id", None), role="user", content=prompt)  # type: ignore[attr-defined]
+                        logger.debug("ai_projects: sent user message; polling for assistant messages")
+                        # naive polling for a composed output if SDK provides it
+                        for _ in range(30):
+                            try:
+                                msgs = client.agents.list_messages(session_id=getattr(session, "id", None))  # type: ignore[attr-defined]
+                                # attempt to gather assistant messages
+                                latest = ""
+                                for m in getattr(msgs, "data", []) or []:
+                                    if getattr(m, "role", "") == "assistant":
+                                        val = getattr(getattr(m, "content", None), "text", None) or getattr(m, "content", None) or ""
+                                        if isinstance(val, str) and val.strip():
+                                            latest = val
+                                            break
+                                if latest:
+                                    text = latest
+                                    break
+                            except Exception:
+                                pass
+                            time.sleep(1)
+                    except Exception as e2:
+                        logger.warning("ai_projects: session flow failed: %s", repr(e2))
+            else:
+                # AgentsClient surface (azure-ai-agents)
+                try:
+                    logger.info("ai_projects: agents.create_thread_and_run on agent_id=%s", agent_id)
+                    resp = client.create_thread_and_run(agent_id=agent_id, input=prompt)  # type: ignore[attr-defined]
+                    text = getattr(resp, "output_text", None) or getattr(resp, "content", None) or ""
+                except Exception as e:
+                    logger.warning("ai_projects: create_thread_and_run failed: %s", repr(e))
 
             if not isinstance(text, str) or not text.strip():
                 raise RuntimeError("Empty agent response")
