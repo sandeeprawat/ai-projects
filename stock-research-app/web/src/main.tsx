@@ -2,6 +2,33 @@ import { getUser, initGoogle, clearToken, getToken } from "./auth";
 import { renderReports } from "./pages/reports";
 import { renderSchedules } from "./pages/schedules";
 
+type Theme = "light" | "dark";
+
+function applyTheme(theme: Theme) {
+  document.documentElement.setAttribute("data-theme", theme === "dark" ? "dark" : "light");
+  localStorage.setItem("theme", theme);
+  const btn = document.getElementById("themeToggle") as HTMLButtonElement | null;
+  if (btn) btn.textContent = theme === "dark" ? "Light" : "Dark";
+}
+
+function initTheme() {
+  const saved = localStorage.getItem("theme") as Theme | null;
+  const theme: Theme =
+    saved ?? (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  applyTheme(theme);
+}
+
+function wireThemeToggle() {
+  const btn = document.getElementById("themeToggle") as HTMLButtonElement | null;
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    const current = (document.documentElement.getAttribute("data-theme") as Theme) || "light";
+    applyTheme(current === "dark" ? "light" : "dark");
+  });
+  const current = (document.documentElement.getAttribute("data-theme") as Theme) || "light";
+  btn.textContent = current === "dark" ? "Light" : "Dark";
+}
+
 function appShell() {
   const el = document.getElementById("root")!;
   el.innerHTML = `
@@ -15,7 +42,10 @@ function appShell() {
           <a href="#/schedules" id="nav-schedules">Schedules</a>
           <a href="#/reports" id="nav-reports">Reports</a>
         </nav>
-        <div id="userArea" style="display:flex;align-items:center;gap:10px;"></div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button id="themeToggle" class="secondary" title="Toggle theme">Dark</button>
+          <div id="userArea" style="display:flex;align-items:center;gap:10px;"></div>
+        </div>
       </div>
       <main class="main">
         <div id="pageRoot"></div>
@@ -56,7 +86,7 @@ function renderUserArea() {
   if (user) {
     const avatar = user.picture ? `<img src="${user.picture}" alt="" style="width:24px;height:24px;border-radius:50%;">` : "";
     area.innerHTML = `
-      <span style="color:#cbd5e1;">${avatar ? avatar : ""} ${user.name || user.email}</span>
+      <span style="color:var(--muted);">${avatar ? avatar : ""} ${user.name || user.email}</span>
       <button id="signOutBtn" class="secondary">Sign out</button>
     `;
     const btn = area.querySelector("#signOutBtn") as HTMLButtonElement | null;
@@ -90,7 +120,9 @@ function route() {
 }
 
 function boot() {
+  initTheme();
   appShell();
+  wireThemeToggle();
   renderUserArea();
   route();
   window.addEventListener("hashchange", route);
