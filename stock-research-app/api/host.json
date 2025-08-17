@@ -6,11 +6,11 @@
   },
   "logging": {
     "logLevel": {
-      "Function": "Information",
-      "Host.Results": "Information",
-      "Host.Aggregator": "Information",
-      "stock.openai_agent": "Information",
-      "default": "Information"
+      "Function": "Warning",
+      "Host.Results": "Warning",
+      "Host.Aggregator": "Warning",
+      "stock.openai_agent": "Warning",
+      "default": "Warning"
     }
   }
 }

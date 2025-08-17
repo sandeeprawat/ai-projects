@@ -58,10 +58,10 @@ _md = MarkdownIt("commonmark")
 def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str, Any]], user_prompt: Optional[str] = None) -> Dict[str, Any]:
     """
     Use Azure AI Projects Agents with Managed Identity/AAD to produce the report.
-    First try azure-ai-projects (project.agents.get_agent / create_response).
+    Modern flow: create_thread_and_process_run on the Agents surface (project.agents or client.agents), no deprecated create_response/create_session.
     Fallback to Azure OpenAI Assistants if available.
     """
-    prompt = _build_prompt(symbols, sources_per_symbol, user_prompt)
+    prompt = _build_prompt(symbols, sources_per_symbol, user_prompt) if not user_prompt else user_prompt.strip()
 
     # 1) Preferred path: Azure AI Projects SDK
     projects_endpoint = getattr(Settings, "AZURE_AI_PROJECTS_ENDPOINT", "")
@@ -93,18 +93,32 @@ def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str
             logger.info("ai_projects: creating DefaultAzureCredential and AIProjectsClient (endpoint=%s, project_set=%s)", projects_endpoint, bool(projects_project))
             cred = DefaultAzureCredential(exclude_interactive_browser_credential=False)
             client = AIProjectsClient(endpoint=projects_endpoint, credential=cred)  # type: ignore
-            # Validate agent exists for either SDK surface
-            if hasattr(client, "agents"):
-                agent = client.agents.get_agent(agent_id=agent_id)  # type: ignore[attr-defined]
+            # Resolve project-scoped agents service when available
+            project_obj = None
+            try:
+                if hasattr(client, "get_project"):
+                    project_obj = client.get_project(projects_project)  # type: ignore[attr-defined]
+                elif hasattr(client, "projects") and hasattr(client.projects, "get_project"):
+                    project_obj = client.projects.get_project(projects_project)  # type: ignore[attr-defined]
+            except Exception as _proj_e:
+                logger.debug("ai_projects: get_project failed: %s", repr(_proj_e))
+                project_obj = None
+
+            agents_svc = getattr(project_obj, "agents", None) if project_obj is not None else getattr(client, "agents", None)
+
+            # Validate agent exists
+            if agents_svc is not None:
+                agent = agents_svc.get_agent(agent_id=agent_id)  # type: ignore[attr-defined]
             else:
-                agent = client.get_agent(agent_id=agent_id)  # type: ignore[attr-defined]
+                agent = getattr(client, "get_agent")(agent_id=agent_id)  # type: ignore[attr-defined]
+
             logger.info("ai_projects: got agent response (id=%s)", getattr(agent, "id", None))
             if not getattr(agent, "id", None):
                 raise RuntimeError("Agent not found")
 
             # Try simple one-shot response using available surface
             text = ""
-            if hasattr(client, "agents"):
+            if agents_svc is not None:
                 try:
                     thread_payload = AgentThreadCreationOptions(
                         messages=[ThreadMessageOptions(role="user", content=prompt)]
@@ -112,14 +126,14 @@ def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str
                         "messages": [{"role": "user", "content": prompt}]
                     }
                     logger.info("ai_projects: calling agents.create_thread_and_process_run on agent_id=%s", agent_id)
-                    run = client.agents.create_thread_and_process_run(  # type: ignore[attr-defined]
+                    run = agents_svc.create_thread_and_process_run(  # type: ignore[attr-defined]
                         agent_id=agent_id,
                         thread=thread_payload,
                     )
                     # Collect all assistant messages from the completed thread
                     text = ""
                     try:
-                        messages = client.agents.messages.list(  # type: ignore[attr-defined]
+                        messages = agents_svc.messages.list(  # type: ignore[attr-defined]
                             thread_id=getattr(run, "thread_id", None),
                             order=(ListSortOrder.ASCENDING if ListSortOrder else None),
                         )
@@ -127,31 +141,29 @@ def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str
                         for msg in messages:
                             if getattr(msg, "role", "") != "assistant":
                                 continue
-                            # text_messages container support
-                            if hasattr(msg, "text_messages") and msg.text_messages:
-                                for t in msg.text_messages:
-                                    try:
+                            # Prefer text_messages if available; otherwise parse generic content parts
+                            try:
+                                if hasattr(msg, "text_messages") and msg.text_messages:
+                                    for t in msg.text_messages:
                                         val = getattr(getattr(t, "text", None), "value", "") or ""
                                         if val:
-                                            collected.append(val)
-                                    except Exception:
-                                        pass
-                            # generic content parts
-                            for part in getattr(msg, "content", []) or []:
-                                try:
-                                    if (MessageTextContent is not None) and isinstance(part, MessageTextContent):
-                                        val = getattr(getattr(part, "text", None), "value", "") or ""
-                                    else:
-                                        val = ""
-                                        try:
-                                            val = part.get("text", {}).get("value", "")
-                                        except Exception:
-                                            if isinstance(part, str):
-                                                val = part
-                                    if val:
-                                        collected.append(val)
-                                except Exception:
-                                    pass
+                                            if not collected or collected[-1] != val:
+                                                collected.append(val)
+                                else:
+                                    for part in getattr(msg, "content", []) or []:
+                                        if (MessageTextContent is not None) and isinstance(part, MessageTextContent):
+                                            val = getattr(getattr(part, "text", None), "value", "") or ""
+                                        elif isinstance(part, dict):
+                                            val = (part.get("text", {}) or {}).get("value", "") or ""
+                                        elif isinstance(part, str):
+                                            val = part
+                                        else:
+                                            val = ""
+                                        if val:
+                                            if not collected or collected[-1] != val:
+                                                collected.append(val)
+                            except Exception:
+                                pass
                         if collected:
                             text = "\n".join(collected).strip()
                         if not text:
@@ -253,25 +265,17 @@ def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str
 
 def _build_prompt(symbols: List[str], sources_per_symbol: List[Dict[str, Any]], user_prompt: Optional[str] = None) -> str:
     lines: List[str] = []
-    lines.append("You are an equity research assistant. Create a concise but detailed research brief.")
+    lines.append("You are an expert research assistant.")
     lines.append("")
     if user_prompt:
         lines.append("User Research Prompt:")
         lines.append(user_prompt)
         lines.append("")
-    lines.append(f"Symbols: {', '.join(symbols)}" if symbols else "Symbols: (provided via prompt)")
-    lines.append("")
-    for entry in sources_per_symbol:
-        sym = entry.get("symbol") or ""
-        lines.append(f"Sources for {sym}:")
-        for s in entry.get("sources") or []:
-            title = s.get("title") or ""
-            url = s.get("url") or ""
-            excerpt = (s.get("excerpt") or "").strip()
-            lines.append(f"- {title} ({url})")
-            if excerpt:
-                lines.append(f"  Excerpt: {excerpt[:500]}")
+
+    if symbols:
+        lines.append(f"Symbols: {', '.join(symbols)}")
         lines.append("")
+    
     lines.append("Output markdown with sections: Overview, Recent Developments, Financials, Risks, Outlook.")
     lines.append("Cite sources inline as [n] and provide a Citations list at the end with title + URL.")
     return "\n".join(lines)
