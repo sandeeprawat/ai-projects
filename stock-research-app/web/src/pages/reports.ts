@@ -1,4 +1,6 @@
 import { listReports, deleteReport, getReport, type Report } from "../api";
+import { openReportPreview } from "../markdown";
+import { iconEye, iconTrash, iconFilePdf, iconFileHtml, iconFileMd, iconMarkdown, iconRefresh } from "../icons";
 
 export function renderReports(root: HTMLElement) {
   root.innerHTML = "";
@@ -10,8 +12,8 @@ export function renderReports(root: HTMLElement) {
   header.innerHTML = `
     <h2>Reports</h2>
     <div class="actions">
-      <button id="bulkDeleteBtn" class="danger" disabled>Delete Selected</button>
-      <button id="refreshBtn">Refresh</button>
+      <button id="bulkDeleteBtn" class="danger" disabled>${iconTrash()} Delete Selected</button>
+      <button id="refreshBtn">${iconRefresh()} Refresh</button>
     </div>
   `;
   container.appendChild(header);
@@ -56,6 +58,24 @@ export function renderReports(root: HTMLElement) {
     const tr = btn.closest("tr") as HTMLTableRowElement | null;
     const id = tr?.getAttribute("data-id") || "";
     if (!id) return;
+
+    if (btn.classList.contains("previewBtn")) {
+      setStatus("Opening preview…", "info");
+      try {
+        const urls = await ensureSignedUrls(id);
+        if (urls) {
+          const title = (tr?.querySelector("td:nth-child(2)") as HTMLElement | null)?.textContent?.trim() || "Report";
+          const ok = await openReportPreview(urls, title);
+          if (ok) setStatus("");
+          else setStatus("No previewable content for this report.", "error");
+        } else {
+          setStatus("Unable to fetch report details.", "error");
+        }
+      } catch (err: any) {
+        setStatus(`Preview failed: ${err?.message ?? String(err)}`, "error");
+      }
+      return;
+    }
 
     if (btn.classList.contains("viewBtn")) {
       setStatus("Fetching report link…", "info");
@@ -207,11 +227,12 @@ export function renderReports(root: HTMLElement) {
             <td>${escapeHtml(sym)}</td>
             <td>${escapeHtml(created)}</td>
             <td>
-              <button class="viewBtn">View</button>
-              <button class="dlBtn" data-kind="pdf" title="Download PDF">PDF</button>
-              <button class="dlBtn secondary" data-kind="html" title="Download HTML">HTML</button>
-              <button class="dlBtn secondary" data-kind="md" title="Download Markdown">MD</button>
-              <button class="deleteBtn danger">Delete</button>
+              <button class="previewBtn">${iconMarkdown()} Preview</button>
+              <button class="viewBtn">${iconEye()} View</button>
+              <button class="dlBtn" data-kind="pdf" title="Download PDF">${iconFilePdf()} PDF</button>
+              <button class="dlBtn secondary" data-kind="html" title="Download HTML">${iconFileHtml()} HTML</button>
+              <button class="dlBtn secondary" data-kind="md" title="Download Markdown">${iconFileMd()} MD</button>
+              <button class="deleteBtn danger">${iconTrash()} Delete</button>
             </td>
           </tr>
         `;

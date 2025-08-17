@@ -183,3 +183,28 @@ table.table { width: 100%; border-collapse: collapse; min-width: 720px; }
   display: inline-block; padding: 2px 8px; border-radius: 999px;
   font-size: 12px; color: #334155; background: #f1f5f9; border: 1px solid var(--border);
 }
+
+/* Icons */
+.icon { vertical-align: -2px; margin-right: 6px; }
+
+/* Modal */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal-backdrop.hidden { display: none; }
+.modal { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 50px var(--shadow); width: min(900px, 92vw); max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.modal-title { font-weight: 600; color: var(--text-strong); }
+.modal-close { background: transparent; border: none; font-size: 22px; line-height: 1; padding: 4px 8px; cursor: pointer; color: var(--text); }
+.modal-body { padding: 14px; overflow: auto; }
+
+/* Markdown body (scoped) */
+.markdown-body { line-height: 1.6; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 { color: var(--text-strong); margin: 1em 0 0.5em; line-height: 1.25; }
+.markdown-body p { margin: 0.5em 0; }
+.markdown-body ul, .markdown-body ol { padding-left: 1.4em; margin: 0.5em 0; }
+.markdown-body code { background: #f1f5f9; color: #0f172a; padding: 2px 6px; border-radius: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: 12px; }
+[data-theme="dark"] .markdown-body code { background: #111827; color: #e5e7eb; }
+.markdown-body pre { background: #0b1220; color: #e5e7eb; padding: 12px; border-radius: 8px; overflow: auto; }
+[data-theme="light"] .markdown-body pre { background: #0f172a; color: #e5e7eb; }
+.markdown-body table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
+.markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: 6px 8px; }
+.markdown-body blockquote { margin: 0.5em 0; padding: 6px 10px; border-left: 3px solid var(--primary); background: var(--primary-50); }

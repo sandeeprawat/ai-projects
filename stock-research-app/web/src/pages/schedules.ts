@@ -11,6 +11,8 @@ import {
   type EmailSettings,
   type Report
 } from "../api";
+import { openReportPreview } from "../markdown";
+import { iconPlay, iconEdit, iconEye, iconTrash, iconRefresh, iconFilePdf, iconFileHtml, iconFileMd, iconMarkdown } from "../icons";
 
 export function renderSchedules(root: HTMLElement) {
   root.innerHTML = "";
@@ -54,7 +56,7 @@ export function renderSchedules(root: HTMLElement) {
   header.innerHTML = `
     <h2>Schedules</h2>
     <div class="actions">
-      <button id="refreshBtn">Refresh</button>
+      <button id="refreshBtn">${iconRefresh()} Refresh</button>
     </div>
   `;
   page.appendChild(header);
@@ -289,10 +291,10 @@ export function renderSchedules(root: HTMLElement) {
             <td><span class="badge">${escapeHtml(cad)}</span></td>
             <td>${escapeHtml(nxt)}</td>
             <td>
-              <button class="runBtn">Run now</button>
-              <button class="editBtn">Edit</button>
-              <button class="viewReportsBtn">View Reports</button>
-              <button class="deleteBtn danger">Delete</button>
+              <button class="runBtn">${iconPlay()} Run now</button>
+              <button class="editBtn">${iconEdit()} Edit</button>
+              <button class="viewReportsBtn">${iconEye()} View Reports</button>
+              <button class="deleteBtn danger">${iconTrash()} Delete</button>
             </td>
           </tr>
           <tr class="reportsRow" data-parent="${escapeHtml(s.id || "")}" style="display:none;">
@@ -410,10 +412,11 @@ export function renderSchedules(root: HTMLElement) {
               <div style="font-size:12px;color:#9ca3af;">${escapeHtml(created)}</div>
             </div>
             <div style="display:flex;gap:6px;">
-              <button class="viewBtn">View</button>
-              <button class="dlBtn" data-kind="pdf" title="Download PDF">PDF</button>
-              <button class="dlBtn secondary" data-kind="html" title="Download HTML">HTML</button>
-              <button class="dlBtn secondary" data-kind="md" title="Download Markdown">MD</button>
+              <button class="previewBtn">${iconMarkdown()} Preview</button>
+              <button class="viewBtn">${iconEye()} View</button>
+              <button class="dlBtn" data-kind="pdf" title="Download PDF">${iconFilePdf()} PDF</button>
+              <button class="dlBtn secondary" data-kind="html" title="Download HTML">${iconFileHtml()} HTML</button>
+              <button class="dlBtn secondary" data-kind="md" title="Download Markdown">${iconFileMd()} MD</button>
             </div>
           </div>
         `;
@@ -421,7 +424,27 @@ export function renderSchedules(root: HTMLElement) {
       .join("");
     host.innerHTML = items;
 
-    // Wire view/download for inline list
+    // Wire preview/view/download for inline list
+    host.querySelectorAll<HTMLButtonElement>(".previewBtn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const item = btn.closest(".inline-item") as HTMLElement | null;
+        const rid = item?.getAttribute("data-rid") || "";
+        if (!rid) return;
+        setStatus("Opening preview…", "info");
+        try {
+          const urls = await ensureSignedUrls(scheduleId, rid);
+          if (urls) {
+            const ok = await openReportPreview(urls, "Report");
+            if (ok) setStatus("");
+            else setStatus("No previewable content for this report.", "error");
+          } else {
+            setStatus("Unable to fetch report details.", "error");
+          }
+        } catch (e: any) {
+          setStatus(`Preview failed: ${e?.message ?? String(e)}`, "error");
+        }
+      });
+    });
     host.querySelectorAll<HTMLButtonElement>(".viewBtn").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const item = btn.closest(".inline-item") as HTMLElement | null;
