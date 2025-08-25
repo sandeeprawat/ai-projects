@@ -41,6 +41,7 @@ async def main(req: func.HttpRequest, starter: str) -> func.HttpResponse:
     email = (sched.get("email") or {})
     email_to = email.get("to") or []
     attach_pdf = bool(email.get("attachPdf", False))
+    deep_research = bool(sched.get("deepResearch", False))
 
     orch_input: Dict[str, Any] = {
         "scheduleId": schedule_id,
@@ -50,6 +51,7 @@ async def main(req: func.HttpRequest, starter: str) -> func.HttpResponse:
         "emailTo": email_to,
         "userId": user_id,
         "attachPdf": attach_pdf,
+        "deepResearch": deep_research,
     }
 
     client = df.DurableOrchestrationClient(starter)

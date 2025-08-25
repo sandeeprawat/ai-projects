@@ -57,6 +57,7 @@ class Schedule(BaseModel):
     symbols: List[str] = Field(default_factory=list)
     recurrence: Recurrence = Field(default_factory=Recurrence)
     email: EmailSettings = Field(default_factory=EmailSettings)
+    deepResearch: bool = False
     active: bool = True
     nextRunAt: Optional[str] = None
 

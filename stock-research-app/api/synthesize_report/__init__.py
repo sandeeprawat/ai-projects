@@ -13,4 +13,5 @@ def main(input: Dict[str, Any]) -> Dict[str, Any]:
     symbols: List[str] = input.get("symbols") or []
     sources_per_symbol = input.get("sources") or []
     prompt: str = input.get("prompt") or ""
-    return _synthesize(symbols, sources_per_symbol, prompt or None)
+    deep_research: bool = bool(input.get("deepResearch", False))
+    return _synthesize(symbols, sources_per_symbol, prompt or None, deep_research)

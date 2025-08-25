@@ -25,12 +25,13 @@ except Exception:
         AIProjectsClient = None  # type: ignore
 # Try to import agent thread/run models for create_thread_and_process_run
 try:
-    from azure.ai.agents.models import AgentThreadCreationOptions, ThreadMessageOptions, ListSortOrder, MessageTextContent  # type: ignore
+    from azure.ai.agents.models import AgentThreadCreationOptions, ThreadMessageOptions, ListSortOrder, MessageTextContent, DeepResearchTool  # type: ignore
 except Exception:  # pragma: no cover
     AgentThreadCreationOptions = None  # type: ignore
     ThreadMessageOptions = None  # type: ignore
     ListSortOrder = None  # type: ignore
     MessageTextContent = None  # type: ignore
+    DeepResearchTool = None  # type: ignore
 
 import time
 import os
@@ -53,7 +54,149 @@ try:
 except Exception:
     pass
 
-_md = MarkdownIt("commonmark")
+_md = MarkdownIt("commonmark", {"linkify": True})
+
+def _synthesize_with_deep_research(symbols: List[str], sources_per_symbol: List[Dict[str, Any]], user_prompt: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Use Azure AI Projects Agents with the Deep Research tool to produce the report.
+    Follows the Python sample: create DeepResearchTool, create an agent with that tool, run, collect output.
+    """
+    if not (AIProjectsClient and DeepResearchTool):
+        raise RuntimeError("Deep Research not available (client or tool missing)")
+
+    projects_endpoint = getattr(Settings, "AZURE_AI_PROJECTS_ENDPOINT", "")
+    projects_project = getattr(Settings, "AZURE_AI_PROJECTS_PROJECT", "")
+    if not projects_endpoint:
+        raise RuntimeError("PROJECT endpoint not configured")
+
+    # Resolve model deployments and Bing connection
+    model_name = os.getenv("MODEL_DEPLOYMENT_NAME") or getattr(Settings, "AZURE_OPENAI_DEPLOYMENT", "") or "gpt-4o"
+    deep_model = os.getenv("DEEP_RESEARCH_MODEL_DEPLOYMENT_NAME") or "o3-deep-research"
+
+    conn_id = os.getenv("AZURE_BING_CONNECTION_ID") or os.getenv("AZURE_BING_CONECTION_ID") or ""
+    try:
+        if not conn_id:
+            # Optionally resolve by name via project connections
+            bing_name = os.getenv("BING_RESOURCE_NAME", "")
+            if bing_name:
+                cred = DefaultAzureCredential(exclude_interactive_browser_credential=False)
+                client_tmp = AIProjectsClient(endpoint=projects_endpoint, credential=cred)  # type: ignore
+                project_obj = None
+                try:
+                    if hasattr(client_tmp, "get_project"):
+                        project_obj = client_tmp.get_project(projects_project)  # type: ignore[attr-defined]
+                    elif hasattr(client_tmp, "projects") and hasattr(client_tmp.projects, "get_project"):
+                        project_obj = client_tmp.projects.get_project(projects_project)  # type: ignore[attr-defined]
+                except Exception:
+                    project_obj = None
+                connections_svc = getattr(project_obj, "connections", None) if project_obj is not None else getattr(client_tmp, "connections", None)
+                if connections_svc is not None and hasattr(connections_svc, "get"):
+                    conn = connections_svc.get(name=bing_name)  # type: ignore[attr-defined]
+                    conn_id = getattr(conn, "id", "") or ""
+    except Exception:
+        pass
+    if not conn_id:
+        raise RuntimeError("Bing connection id not configured (AZURE_BING_CONNECTION_ID or BING_RESOURCE_NAME)")
+
+    cred = DefaultAzureCredential(exclude_interactive_browser_credential=False)
+    client = AIProjectsClient(endpoint=projects_endpoint, credential=cred)  # type: ignore
+    # Resolve agents service (project-scoped when available)
+    project_obj = None
+    try:
+        if hasattr(client, "get_project"):
+            project_obj = client.get_project(projects_project)  # type: ignore[attr-defined]
+        elif hasattr(client, "projects") and hasattr(client.projects, "get_project"):
+            project_obj = client.projects.get_project(projects_project)  # type: ignore[attr-defined]
+    except Exception:
+        project_obj = None
+    agents_svc = getattr(project_obj, "agents", None) if project_obj is not None else getattr(client, "agents", None)
+
+    # Create Deep Research tool and agent
+    dr_tool = DeepResearchTool(
+        bing_grounding_connection_id=conn_id,
+        deep_research_model=deep_model,
+    )
+    instructions = "You are a helpful Agent that performs deep web research and produces a well-cited markdown report."
+    agent = agents_svc.create_agent(  # type: ignore[attr-defined]
+        model=model_name,
+        name="deep-research-agent",
+        instructions=instructions,
+        tools=dr_tool.definitions,
+    )
+
+    # Build prompt and run
+    prompt = user_prompt.strip() if user_prompt else _build_prompt(symbols, sources_per_symbol, None)
+    thread = agents_svc.threads.create()  # type: ignore[attr-defined]
+    agents_svc.messages.create(thread_id=getattr(thread, "id", None), role="user", content=prompt)  # type: ignore[attr-defined]
+    run = agents_svc.runs.create(thread_id=getattr(thread, "id", None), agent_id=getattr(agent, "id", None))  # type: ignore[attr-defined]
+
+    # Poll until completion
+    for _ in range(1200):
+        status = getattr(run, "status", None)
+        if status in ("completed", "succeeded"):
+            break
+        if status in ("failed", "cancelled", "expired", "timed_out", "canceled"):
+            raise RuntimeError(f"DeepResearch run status: {status}")
+        time.sleep(1)
+        run = agents_svc.runs.get(thread_id=getattr(thread, "id", None), run_id=getattr(run, "id", None))  # type: ignore[attr-defined]
+
+    # Collect latest assistant message
+    text = ""
+    try:
+        last_msg = None
+        if hasattr(agents_svc, "messages") and hasattr(agents_svc.messages, "get_last_message_by_role"):
+            last_msg = agents_svc.messages.get_last_message_by_role(thread_id=getattr(thread, "id", None), role="assistant")  # type: ignore[attr-defined]
+        if last_msg is None:
+            messages = agents_svc.messages.list(thread_id=getattr(thread, "id", None), order=(ListSortOrder.ASCENDING if ListSortOrder else None))  # type: ignore[attr-defined]
+            for msg in messages:
+                if getattr(msg, "role", "") == "assistant":
+                    last_msg = msg
+        collected: List[str] = []
+        if last_msg is not None:
+            if hasattr(last_msg, "text_messages") and last_msg.text_messages:
+                for t in last_msg.text_messages:
+                    val = getattr(getattr(t, "text", None), "value", "") or ""
+                    if val:
+                        collected.append(val)
+            else:
+                for part in getattr(last_msg, "content", []) or []:
+                    if (MessageTextContent is not None) and isinstance(part, MessageTextContent):
+                        val = getattr(getattr(part, "text", None), "value", "") or ""
+                    elif isinstance(part, dict):
+                        val = (part.get("text", {}) or {}).get("value", "") or ""
+                    elif isinstance(part, str):
+                        val = part
+                    else:
+                        val = ""
+                    if val:
+                        collected.append(val)
+        if collected:
+            text = "\n".join(collected).strip()
+    except Exception:
+        pass
+    finally:
+        try:
+            # Clean up ephemeral agent
+            if hasattr(agents_svc, "delete_agent") and getattr(agent, "id", None):
+                agents_svc.delete_agent(getattr(agent, "id", None))  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+    if not isinstance(text, str) or not text.strip():
+        raise RuntimeError("Empty DeepResearch agent response")
+
+    title_line = next((line.strip("# ").strip() for line in text.splitlines() if line.startswith("# ")), None)
+    title = title_line or f"Stock Research Report: {', '.join(symbols) or 'Prompted'}"
+    md = text
+    html = _md.render(md)
+    citations: List[Dict[str, str]] = []
+    for entry in sources_per_symbol:
+        for s in entry.get("sources") or []:
+            u = s.get("url")
+            t = s.get("title") or "Source"
+            if u:
+                citations.append({"title": t, "url": u})
+    return {"title": title, "markdown": md, "html": html, "citations": citations}
 
 def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str, Any]], user_prompt: Optional[str] = None) -> Dict[str, Any]:
     """
@@ -310,14 +453,23 @@ def _fallback_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any]
     if citations:
         sections.append("## Citations")
         for i, c in enumerate(citations, start=1):
-            sections.append(f"[{i}] {c.get('title')}: {c.get('url')}")
+            t = c.get("title") or "Source"
+            u = c.get("url") or ""
+            sections.append(f"[{i}] [{t}]({u})")
     md = "\n".join(sections)
     return title, md, citations
 
-def synthesize_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any]], user_prompt: Optional[str] = None) -> Dict[str, Any]:
+def synthesize_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any]], user_prompt: Optional[str] = None, deep_research: bool = False) -> Dict[str, Any]:
     """
     Returns: {"title": str, "markdown": str, "html": str, "citations": [...]}
     """
+    if deep_research:
+        try:
+            return _synthesize_with_deep_research(symbols, sources_per_symbol, user_prompt)
+        except Exception as e:
+            logger.warning("openai_agent: deep research path failed: %s", repr(e))
+            # fall through to other strategies
+
     endpoint = Settings.AZURE_OPENAI_ENDPOINT
     api_version = Settings.AZURE_OPENAI_API_VERSION
     deployment = Settings.AZURE_OPENAI_DEPLOYMENT

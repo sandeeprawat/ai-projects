@@ -93,6 +93,7 @@ export type Schedule = {
   symbols: string[];
   recurrence: Recurrence;
   email: EmailSettings;
+  deepResearch?: boolean;
   active: boolean;
   nextRunAt?: string | null;
   createdAt?: string | null;
@@ -123,6 +124,7 @@ export async function createSchedule(input: {
   symbols?: string[];
   recurrence: Recurrence;
   email: EmailSettings;
+  deepResearch?: boolean;
   active?: boolean;
 }): Promise<Schedule> {
   return postJson<Schedule>("/schedules", {
@@ -130,19 +132,21 @@ export async function createSchedule(input: {
     symbols: input.symbols ?? [],
     recurrence: input.recurrence,
     email: input.email,
+    deepResearch: input.deepResearch ?? false,
     active: input.active ?? true
   });
 }
 
 export async function updateSchedule(
   scheduleId: string,
-  input: { prompt: string; symbols?: string[]; recurrence: Recurrence; email: EmailSettings; active?: boolean }
+  input: { prompt: string; symbols?: string[]; recurrence: Recurrence; email: EmailSettings; deepResearch?: boolean; active?: boolean }
 ): Promise<Schedule> {
   return putJson<Schedule>(`/schedules/${encodeURIComponent(scheduleId)}`, {
     prompt: input.prompt,
     symbols: input.symbols ?? [],
     recurrence: input.recurrence,
     email: input.email,
+    deepResearch: input.deepResearch ?? false,
     active: input.active ?? true
   });
 }

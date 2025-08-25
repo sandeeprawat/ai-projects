@@ -56,6 +56,7 @@ async def main(req: func.HttpRequest, starter: str) -> func.HttpResponse:
         symbols=symbols,
         recurrence=recurrence,
         email=email,
+        deepResearch=bool(body.get("deepResearch", False)),
         active=bool(body.get("active", True)),
     )
     # compute next run

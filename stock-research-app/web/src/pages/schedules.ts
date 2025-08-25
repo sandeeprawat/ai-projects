@@ -127,9 +127,12 @@ export function renderSchedules(root: HTMLElement) {
         <label for="emailTo">Email recipients (comma separated)</label>
         <input id="emailTo" type="text" placeholder="me@example.com, team@example.com" />
       </div>
-      <div class="col-4" style="display:flex;align-items:flex-end;gap:12px;">
+      <div class="col-4" style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;">
         <label style="display:flex;align-items:center;gap:8px;margin:0;">
           <input id="attachPdf" type="checkbox" /> Attach PDF
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;margin:0;">
+          <input id="deepResearch" type="checkbox" /> Deep Research
         </label>
         <label style="display:flex;align-items:center;gap:8px;margin:0;">
           <input id="active" type="checkbox" checked /> Active
@@ -190,6 +193,7 @@ export function renderSchedules(root: HTMLElement) {
   const weekdayEl = formCard.querySelector<HTMLSelectElement>("#weekday")!;
   const emailToEl = formCard.querySelector<HTMLInputElement>("#emailTo")!;
   const attachPdfEl = formCard.querySelector<HTMLInputElement>("#attachPdf")!;
+  const deepResearchEl = formCard.querySelector<HTMLInputElement>("#deepResearch")!;
   const activeEl = formCard.querySelector<HTMLInputElement>("#active")!;
 
   function setStatus(text: string, kind: "info" | "success" | "error" = "info") {
@@ -210,6 +214,7 @@ export function renderSchedules(root: HTMLElement) {
     weekdayEl.value = "";
     emailToEl.value = "";
     attachPdfEl.checked = false;
+    deepResearchEl.checked = false;
     activeEl.checked = true;
     createBtn.style.display = "";
     updateBtn.style.display = "none";
@@ -222,6 +227,7 @@ export function renderSchedules(root: HTMLElement) {
     symbols: string[];
     recurrence: Recurrence;
     email: EmailSettings;
+    deepResearch: boolean;
     active: boolean;
   } {
     const cadence = (cadenceEl.value || "weekly") as Recurrence["cadence"];
@@ -242,6 +248,7 @@ export function renderSchedules(root: HTMLElement) {
       symbols,
       recurrence: rec,
       email,
+      deepResearch: !!deepResearchEl.checked,
       active: !!activeEl.checked
     };
   }
@@ -264,6 +271,7 @@ export function renderSchedules(root: HTMLElement) {
     weekdayEl.value = s.recurrence?.weekday !== null && s.recurrence?.weekday !== undefined ? String(s.recurrence?.weekday) : "";
     emailToEl.value = (s.email?.to || []).join(", ");
     attachPdfEl.checked = !!s.email?.attachPdf;
+    deepResearchEl.checked = !!(s as any).deepResearch;
     activeEl.checked = !!s.active;
 
     createBtn.style.display = "none";
@@ -288,7 +296,7 @@ export function renderSchedules(root: HTMLElement) {
               <div title="${escapeHtml(s.prompt || "")}">${escapeHtml(promptShort)}${(s.prompt || "").length > 80 ? "…" : ""}</div>
             </td>
             <td>${escapeHtml(sym)}</td>
-            <td><span class="badge">${escapeHtml(cad)}</span></td>
+            <td><span class="badge">${escapeHtml(cad)}</span>${s.deepResearch ? ' <span class="badge">Deep</span>' : ''}</td>
             <td>${escapeHtml(nxt)}</td>
             <td>
               <button class="runBtn">${iconPlay()} Run now</button>

@@ -19,6 +19,7 @@ def orchestrator_function(context: df.DurableOrchestrationContext):
     email_to = input_.get("emailTo", [])
     user_id = input_.get("userId")
     attach_pdf = bool(input_.get("attachPdf", False))
+    deep_research = bool(input_.get("deepResearch", False))
     prompt = (input_.get("prompt") or "")
 
     sources_per_symbol = []
@@ -36,7 +37,8 @@ def orchestrator_function(context: df.DurableOrchestrationContext):
     report = yield context.call_activity("synthesize_report", {
         "symbols": symbols,
         "sources": sources_per_symbol,
-        "prompt": prompt
+        "prompt": prompt,
+        "deepResearch": deep_research
     })
 
     saved = yield context.call_activity("save_report", {

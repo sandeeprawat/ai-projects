@@ -6,7 +6,19 @@
 import { marked } from "marked";
 import createDOMPurify from "dompurify";
 
+marked.setOptions({ gfm: true });
+
 const DOMPurify = createDOMPurify(window);
+
+// Convert bare URLs to autolink form so markdown preview links render without altering authored syntax
+function linkifyBareUrls(md: string): string {
+  try {
+    // Wrap bare http(s) URLs not already in angle brackets/markdown links
+    return md.replace(/(^|[\s(])((https?:\/\/)[^\s<>)]+)/g, (_m, pre, url) => `${pre}<${url}>`);
+  } catch {
+    return md;
+  }
+}
 
 // Modal UI
 let modalHost: HTMLDivElement | null = null;
@@ -97,7 +109,7 @@ async function fetchText(url: string): Promise<string> {
 }
 
 export async function openMarkdownFromText(md: string, title?: string) {
-  const html = await marked.parse(md);
+  const html = await marked.parse(linkifyBareUrls(md));
   const safe = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
   ensureModal();
   if (modalBodyEl) modalBodyEl.innerHTML = safe;
