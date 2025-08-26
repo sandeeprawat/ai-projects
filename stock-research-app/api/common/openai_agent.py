@@ -20,7 +20,7 @@ except Exception:  # pragma: no cover
     AIProjectsClient = None
 # Try to import agent thread/run models for create_thread_and_process_run
 try:
-    from azure.ai.agents.models import AgentThreadCreationOptions, ThreadMessageOptions, ListSortOrder, MessageTextContent, DeepResearchTool
+    from azure.ai.agents.models import AgentThreadCreationOptions, ThreadMessage, ThreadMessageOptions, ListSortOrder, MessageTextContent, DeepResearchTool
 except Exception:  # pragma: no cover
     AgentThreadCreationOptions = None
     ThreadMessageOptions = None
@@ -30,6 +30,7 @@ except Exception:  # pragma: no cover
 
 import time
 import os
+import html
 from .config import Settings
 
 import logging
@@ -49,7 +50,168 @@ try:
 except Exception:
     pass
 
-_md = MarkdownIt("commonmark", {"linkify": True})
+_md = MarkdownIt("commonmark", {"linkify": True, "html": True})
+
+def _normalize_url(u: str) -> str:
+    """
+    Ensure URLs are absolute and clickable. Adds https:// for bare domains or www.*, and resolves //scheme-relative.
+    Returns empty string for invalid input.
+    """
+    try:
+        if not isinstance(u, str):
+            return ""
+        s = u.strip()
+        if not s:
+            return ""
+        if s.startswith("//"):
+            return "https:" + s
+        if s.startswith("http://") or s.startswith("https://"):
+            return s
+        if s.startswith("www."):
+            return "https://" + s
+        import re as _re
+        if _re.match(r"^[A-Za-z0-9.-]+\.[A-Za-z]{2,}(/.*)?$", s):
+            return "https://" + s
+        return s
+    except Exception:
+        return ""
+
+def _esc_attr(s: str) -> str:
+    """Escape attribute values for safe HTML injection."""
+    try:
+        return html.escape(s or "", quote=True)
+    except Exception:
+        return s or ""
+
+def _extract_url_citations_from_message(msg : ThreadMessage) -> List[Dict[str, str]]:
+    """
+    Extract URL citations from a ThreadMessage, matching the raw schema:
+      content[*].text.annotations[*].url_citation.{url,title}
+    Falls back to .details if SDK maps to that name.
+    """
+    results: List[Dict[str, str]] = []
+    try:
+        anns = msg.url_citation_annotations
+        if not anns:
+            return results
+        for a in anns:
+            url = ""
+            title = "Source"
+            try:
+                details = a.url_citation
+                if details:
+                    _u = getattr(details, "url", "") or ""
+                    url = _normalize_url(_u)
+                    title = getattr(details, "title", None) or "Source"
+            except Exception:
+                url = ""
+                title = "Source"
+            if url:
+                results.append({"title": str(title), "url": str(url)})
+    except Exception as _e:
+        logger.debug("extract url citations failed: %s", repr(_e))
+    return results
+
+def _debug_log_url_annotations(msg) -> None:
+    try:
+        anns = getattr(msg, "url_citation_annotations", None) or []
+        for i, a in enumerate(anns):
+            try:
+                marker = getattr(a, "text", None) or ""
+                start = getattr(a, "start_index", None)
+                end = getattr(a, "end_index", None)
+                details = getattr(a, "url_citation", None) or getattr(a, "details", None)
+                url = getattr(details, "url", "") if details else ""
+                title = getattr(details, "title", "") if details else ""
+                logger.debug("url_annotation[%d]: text=%r start=%s end=%s url=%s title=%s", i, marker, start, end, url, title)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+def _build_marker_map(msg) -> Dict[str, Dict[str, str]]:
+    """
+    Build a mapping from inline marker text (e.g., '【3:0†source】') to {url,title}
+    from a ThreadMessage's url_citation_annotations.
+    """
+    mapping: Dict[str, Dict[str, str]] = {}
+    try:
+        anns = getattr(msg, "url_citation_annotations", None) or []
+        for a in anns:
+            try:
+                marker = getattr(a, "text", None) or ""
+                details = getattr(a, "url_citation", None) or getattr(a, "details", None)
+                raw_url = getattr(details, "url", "") if details else ""
+                url = _normalize_url(raw_url)
+                title = getattr(details, "title", None) or "Source"
+                if marker and url:
+                    mapping[str(marker)] = {"url": str(url), "title": str(title)}
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return mapping
+
+def _inject_superscripts_from_annotations(text: str, marker_map: Dict[str, Dict[str, str]]) -> Tuple[str, List[Dict[str, str]], Dict[str, int]]:
+    """
+    Replace inline marker substrings (e.g., '【3:0†source】') with superscripted
+    citation links (<sup><a href="#cite-n">[n]</a></sup>) based on the provided marker_map.
+    Returns: (new_text, ordered_citations, url_index_map)
+    """
+    if not isinstance(text, str) or not text or not marker_map:
+        return text, [], {}
+    import re
+    pattern = re.compile(r"【[^】]+】")
+
+    url_to_index: Dict[str, int] = {}
+    next_idx = 1
+    out_parts: List[str] = []
+    last = 0
+    replaced = 0
+
+    for m in pattern.finditer(text):
+        marker = m.group(0)
+        meta = marker_map.get(marker) or {}
+        url = meta.get("url") or ""
+        title = meta.get("title") or "Source"
+
+        out_parts.append(text[last:m.start()])
+        if url:
+            idx = url_to_index.get(url)
+            if idx is None:
+                idx = next_idx
+                url_to_index[url] = idx
+                next_idx += 1
+            safe_url = _esc_attr(url)
+            safe_title = _esc_attr(title)
+            replacement = f'<sup><a href="{safe_url}" title="{safe_title}" target="_blank" rel="noopener noreferrer">[{idx}]</a></sup>'
+        else:
+            replacement = f"<sup>{_esc_attr(marker)}</sup>"
+        out_parts.append(replacement)
+        last = m.end()
+        replaced += 1
+
+    out_parts.append(text[last:])
+    new_text = "".join(out_parts)
+
+    citations: List[Dict[str, str]] = []
+    for url, idx in sorted(url_to_index.items(), key=lambda kv: kv[1]):
+        # Find a title for this URL from any marker entry
+        title = "Source"
+        try:
+            for v in marker_map.values():
+                if (v.get("url") or "") == url:
+                    title = v.get("title") or "Source"
+                    break
+        except Exception:
+            pass
+        citations.append({"title": title, "url": url})
+
+    try:
+        logger.debug("superscripts injected: replacements=%d, urls=%d", replaced, len(url_to_index))
+    except Exception:
+        pass
+    return new_text, citations, url_to_index
 
 def _resolve_projects_config(mode: str):
     """
@@ -151,6 +313,7 @@ def _synthesize_with_deep_research(symbols: List[str], sources_per_symbol: List[
 
     # Collect latest assistant message
     text = ""
+    url_citations: List[Dict[str, str]] = []
     try:
         last_msg = None
         if hasattr(agents_svc, "messages") and hasattr(agents_svc.messages, "get_last_message_by_role"):
@@ -180,7 +343,21 @@ def _synthesize_with_deep_research(symbols: List[str], sources_per_symbol: List[
                     if val:
                         collected.append(val)
         if collected:
+            # Log each assistant text segment
+            try:
+                for i, seg in enumerate(collected):
+                    logger.debug("deep_research assistant part[%d]: %s", i, seg)
+            except Exception:
+                pass
             text = "\n".join(collected).strip()
+        # Extract URL citation annotations if available
+        try:
+            if last_msg is not None:
+                url_citations = _extract_url_citations_from_message(last_msg)
+                logger.debug("deep_research url_citation_annotations: %s", url_citations)
+                _debug_log_url_annotations(last_msg)
+        except Exception:
+            pass
     except Exception:
         pass
     finally:
@@ -191,20 +368,52 @@ def _synthesize_with_deep_research(symbols: List[str], sources_per_symbol: List[
         except Exception:
             pass
 
+    try:
+        logger.debug("deep_research assistant raw text:\n%s", text)
+    except Exception:
+        pass
     if not isinstance(text, str) or not text.strip():
         raise RuntimeError("Empty DeepResearch agent response")
 
     title_line = next((line.strip("# ").strip() for line in text.splitlines() if line.startswith("# ")), None)
     title = title_line or f"Stock Research Report: {', '.join(symbols) or 'Prompted'}"
+    ann_citations: List[Dict[str, str]] = []
+    try:
+        marker_map = _build_marker_map(last_msg) if last_msg is not None else {}
+    except Exception:
+        marker_map = {}
+    if marker_map:
+        try:
+            text_with_sup, ann_citations, _url_idx = _inject_superscripts_from_annotations(text, marker_map)
+            if text_with_sup and text_with_sup != text:
+                text = text_with_sup
+        except Exception:
+            pass
     md = text
     html = _md.render(md)
     citations: List[Dict[str, str]] = []
+    seen_urls = set()
+    # Prefer annotation-derived ordering for consistent numbering with superscripts
+    for c in (ann_citations or []):
+        u = _normalize_url(c.get("url") or "")
+        t = c.get("title") or "Source"
+        if u and u not in seen_urls:
+            citations.append({"title": t, "url": u})
+            seen_urls.add(u)
+    for a in (url_citations or []):
+        u = _normalize_url(a.get("url") or "")
+        t = a.get("title") or "Source"
+        if u and u not in seen_urls:
+            citations.append({"title": t, "url": u})
+            seen_urls.add(u)
     for entry in sources_per_symbol:
         for s in entry.get("sources") or []:
-            u = s.get("url")
+            u = _normalize_url(s.get("url") or "")
             t = s.get("title") or "Source"
-            if u:
+            if u and u not in seen_urls:
                 citations.append({"title": t, "url": u})
+                seen_urls.add(u)
+    logger.debug("deep_research combined citations: %s", citations)
     return {"title": title, "markdown": md, "html": html, "citations": citations}
 
 def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str, Any]], user_prompt: Optional[str] = None) -> Dict[str, Any]:
@@ -268,10 +477,28 @@ def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str
                 thread_id=getattr(run, "thread_id", None),
                 order=(ListSortOrder.ASCENDING if ListSortOrder else None),
             )
+            url_citations: List[Dict[str, str]] = []
+            marker_map: Dict[str, Dict[str, str]] = {}
             collected: List[str] = []
             for msg in messages:
                 if getattr(msg, "role", "") != "assistant":
                     continue
+                # Collect URL citation annotations if available
+                try:
+                    anns = _extract_url_citations_from_message(msg)
+                    if anns:
+                        url_citations.extend(anns)
+                    _debug_log_url_annotations(msg)
+                    try:
+                        mm = _build_marker_map(msg)
+                        if mm:
+                            for k, v in mm.items():
+                                if k not in marker_map:
+                                    marker_map[k] = v
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
                 try:
                     if hasattr(msg, "text_messages") and msg.text_messages:
                         for t in msg.text_messages:
@@ -293,24 +520,61 @@ def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str
                 except Exception:
                     pass
             if collected:
+                try:
+                    for i, seg in enumerate(collected):
+                        logger.debug("agent assistant part[%d]: %s", i, seg)
+                except Exception:
+                    pass
                 text = "\n".join(collected).strip()
             if not text:
                 text = getattr(run, "output_text", None) or getattr(run, "content", None) or ""
+            try:
+                logger.debug("agent raw assistant text length=%d", len(text or ""))
+            except Exception:
+                pass
+            try:
+                logger.debug("agent assistant raw text:\n%s", text)
+            except Exception:
+                pass
             
             if not isinstance(text, str) or not text.strip():
                 raise RuntimeError("Empty agent response")
 
             title_line = next((line.strip("# ").strip() for line in text.splitlines() if line.startswith("# ")), None)
             title = title_line or f"Stock Research Report: {', '.join(symbols) or 'Prompted'}"
+            ann_citations: List[Dict[str, str]] = []
+            try:
+                if marker_map:
+                    text_with_sup, ann_citations, _url_idx = _inject_superscripts_from_annotations(text, marker_map)
+                    if text_with_sup and text_with_sup != text:
+                        text = text_with_sup
+            except Exception:
+                pass
             md = text
             html = _md.render(md)
             citations: List[Dict[str, str]] = []
+            seen_urls = set()
+            # Prefer annotation-derived ordering
+            for c in (ann_citations or []):
+                u = _normalize_url(c.get("url") or "")
+                t = c.get("title") or "Source"
+                if u and u not in seen_urls:
+                    citations.append({"title": t, "url": u})
+                    seen_urls.add(u)
+            for a in (url_citations or []):
+                u = _normalize_url(a.get("url") or "")
+                t = a.get("title") or "Source"
+                if u and u not in seen_urls:
+                    citations.append({"title": t, "url": u})
+                    seen_urls.add(u)
             for entry in sources_per_symbol:
                 for s in entry.get("sources") or []:
-                    u = s.get("url")
+                    u = _normalize_url(s.get("url") or "")
                     t = s.get("title") or "Source"
-                    if u:
+                    if u and u not in seen_urls:
                         citations.append({"title": t, "url": u})
+                        seen_urls.add(u)
+            logger.debug("agent combined citations: %s", citations)
             return {"title": title, "markdown": md, "html": html, "citations": citations}
         except Exception as e:
             logger.warning("openai_agent: Azure AI Projects Agents path failed: %s", repr(e))
@@ -376,7 +640,7 @@ def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str
         citations: List[Dict[str, str]] = []
         for entry in sources_per_symbol:
             for s in entry.get("sources") or []:
-                u = s.get("url")
+                u = _normalize_url(s.get("url") or "")
                 t = s.get("title") or "Source"
                 if u:
                     citations.append({"title": t, "url": u})
@@ -421,7 +685,7 @@ def _fallback_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any]
         sections.append(f"## {sym} - Recent Sources")
         for s in entry.get("sources") or []:
             t = s.get("title") or "Source"
-            u = s.get("url") or ""
+            u = _normalize_url(s.get("url") or "")
             ex = (s.get("excerpt") or "").strip()
             if u:
                 citations.append({"title": t, "url": u})
@@ -492,16 +756,11 @@ def synthesize_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any
             citations: List[Dict[str, str]] = []
             for entry in sources_per_symbol:
                 for s in entry.get("sources") or []:
-                    u = s.get("url")
+                    u = _normalize_url(s.get("url") or "")
                     t = s.get("title") or "Source"
                     if u:
                         citations.append({"title": t, "url": u})
+
             return {"title": title, "markdown": md, "html": html, "citations": citations}
         except Exception:
             pass
-
-    # 3) Final fallback: local synthesizer
-    logger.warning("openai_agent: falling back to local synthesizer")
-    title, md, citations = _fallback_report(symbols, sources_per_symbol, user_prompt)
-    html = _md.render(md)
-    return {"title": title, "markdown": md, "html": html, "citations": citations}

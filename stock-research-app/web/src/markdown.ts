@@ -110,7 +110,7 @@ async function fetchText(url: string): Promise<string> {
 
 export async function openMarkdownFromText(md: string, title?: string) {
   const html = await marked.parse(linkifyBareUrls(md));
-  const safe = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+  const safe = DOMPurify.sanitize(html, { USE_PROFILES: { html: true }, ADD_TAGS: ["sup", "sub"] });
   ensureModal();
   if (modalBodyEl) modalBodyEl.innerHTML = safe;
   openModal(title);
@@ -123,7 +123,7 @@ export async function openMarkdownFromUrl(url: string, title?: string) {
 
 export async function openHtmlFromUrl(url: string, title?: string) {
   const html = await fetchText(url);
-  const safe = DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+  const safe = DOMPurify.sanitize(html, { USE_PROFILES: { html: true }, ADD_TAGS: ["sup", "sub"] });
   ensureModal();
   if (modalBodyEl) modalBodyEl.innerHTML = safe;
   openModal(title);
@@ -135,12 +135,12 @@ export async function openHtmlFromUrl(url: string, title?: string) {
  * Returns true if preview opened, false otherwise.
  */
 export async function openReportPreview(urls: { md?: string | null; html?: string | null }, title?: string): Promise<boolean> {
-  if (urls?.md) {
-    await openMarkdownFromUrl(urls.md, title);
-    return true;
-  }
   if (urls?.html) {
     await openHtmlFromUrl(urls.html, title);
+    return true;
+  }
+  if (urls?.md) {
+    await openMarkdownFromUrl(urls.md, title);
     return true;
   }
   return false;
