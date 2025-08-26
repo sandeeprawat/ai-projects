@@ -5,33 +5,28 @@ from markdown_it import MarkdownIt
 
 try:
     # Azure OpenAI SDK via OpenAI 1.x
-    from openai import AzureOpenAI  # type: ignore
+    from openai import AzureOpenAI
 except Exception:  # pragma: no cover
-    AzureOpenAI = None  # type: ignore
+    AzureOpenAI = None
 
-from azure.identity import DefaultAzureCredential  # type: ignore
+from azure.identity import DefaultAzureCredential
 # Try multiple SDK import variants to support newer packages
-AIProjectsClient = None  # type: ignore
+AIProjectsClient = None
 try:
-    # Newer azure-ai-projects exposes AIProjectClient (singular)
-    from azure.ai.projects import AIProjectClient as _AIProjectsClient  # type: ignore
-    AIProjectsClient = _AIProjectsClient  # type: ignore
-except Exception:
-    try:
-        # azure-ai-agents exposes AgentsClient with a compatible endpoint/credential signature
-        from azure.ai.agents import AgentsClient as _AIProjectsClient  # type: ignore
-        AIProjectsClient = _AIProjectsClient  # type: ignore
-    except Exception:  # pragma: no cover
-        AIProjectsClient = None  # type: ignore
+    # Prefer the Azure AI Projects client; if unavailable, disable Agents path.
+    from azure.ai.projects import AIProjectClient as _AIProjectsClient
+    AIProjectsClient = _AIProjectsClient
+except Exception:  # pragma: no cover
+    AIProjectsClient = None
 # Try to import agent thread/run models for create_thread_and_process_run
 try:
-    from azure.ai.agents.models import AgentThreadCreationOptions, ThreadMessageOptions, ListSortOrder, MessageTextContent, DeepResearchTool  # type: ignore
+    from azure.ai.agents.models import AgentThreadCreationOptions, ThreadMessageOptions, ListSortOrder, MessageTextContent, DeepResearchTool
 except Exception:  # pragma: no cover
-    AgentThreadCreationOptions = None  # type: ignore
-    ThreadMessageOptions = None  # type: ignore
-    ListSortOrder = None  # type: ignore
-    MessageTextContent = None  # type: ignore
-    DeepResearchTool = None  # type: ignore
+    AgentThreadCreationOptions = None
+    ThreadMessageOptions = None
+    ListSortOrder = None
+    MessageTextContent = None
+    DeepResearchTool = None
 
 import time
 import os
@@ -42,7 +37,7 @@ logger = logging.getLogger("stock.openai_agent")
 logger.info("openai_agent: availability - AIProjectsClient=%s, AzureOpenAI=%s", bool(AIProjectsClient), bool(AzureOpenAI))
 # Log installed azure-ai-projects version for diagnostics
 try:
-    import azure.ai.projects as _ai_projects_mod  # type: ignore
+    import azure.ai.projects as _ai_projects_mod
     logger.info("azure-ai-projects version: %s", getattr(_ai_projects_mod, "__version__", "unknown"))
 except Exception as _e:
     logger.info("azure-ai-projects version: unavailable (%s)", repr(_e))
@@ -55,7 +50,6 @@ except Exception:
     pass
 
 _md = MarkdownIt("commonmark", {"linkify": True})
-
 
 def _resolve_projects_config(mode: str):
     """
@@ -98,18 +92,18 @@ def _synthesize_with_deep_research(symbols: List[str], sources_per_symbol: List[
             bing_name = os.getenv("BING_RESOURCE_NAME", "")
             if bing_name:
                 cred = DefaultAzureCredential(exclude_interactive_browser_credential=False)
-                client_tmp = AIProjectsClient(endpoint=projects_endpoint, credential=cred)  # type: ignore
+                client_tmp = AIProjectsClient(endpoint=projects_endpoint, credential=cred)
                 project_obj = None
                 try:
                     if hasattr(client_tmp, "get_project"):
-                        project_obj = client_tmp.get_project(projects_project)  # type: ignore[attr-defined]
+                        project_obj = client_tmp.get_project(projects_project)
                     elif hasattr(client_tmp, "projects") and hasattr(client_tmp.projects, "get_project"):
-                        project_obj = client_tmp.projects.get_project(projects_project)  # type: ignore[attr-defined]
+                        project_obj = client_tmp.projects.get_project(projects_project)
                 except Exception:
                     project_obj = None
                 connections_svc = getattr(project_obj, "connections", None) if project_obj is not None else getattr(client_tmp, "connections", None)
                 if connections_svc is not None and hasattr(connections_svc, "get"):
-                    conn = connections_svc.get(name=bing_name)  # type: ignore[attr-defined]
+                    conn = connections_svc.get(name=bing_name)
                     conn_id = getattr(conn, "id", "") or ""
     except Exception:
         pass
@@ -117,18 +111,8 @@ def _synthesize_with_deep_research(symbols: List[str], sources_per_symbol: List[
         raise RuntimeError("Bing connection id not configured (AZURE_BING_CONNECTION_ID or BING_RESOURCE_NAME)")
 
     cred = DefaultAzureCredential(exclude_interactive_browser_credential=False)
-    client = AIProjectsClient(endpoint=projects_endpoint, credential=cred)  # type: ignore
-    # Resolve agents service (project-scoped when available)
-    project_obj = None
-    try:
-        if hasattr(client, "get_project"):
-            project_obj = client.get_project(projects_project)  # type: ignore[attr-defined]
-        elif hasattr(client, "projects") and hasattr(client.projects, "get_project"):
-            project_obj = client.projects.get_project(projects_project)  # type: ignore[attr-defined]
-    except Exception:
-        project_obj = None
-    agents_svc = getattr(project_obj, "agents", None) if project_obj is not None else getattr(client, "agents", None)
-
+    client = AIProjectsClient(endpoint=projects_endpoint, credential=cred)
+    agents_svc = client.agents 
     # Create Deep Research tool and agent
     dr_tool = DeepResearchTool(
         bing_grounding_connection_id=conn_id,
@@ -142,7 +126,7 @@ def _synthesize_with_deep_research(symbols: List[str], sources_per_symbol: List[
             instructions = f.read().strip() or default_instructions
     except Exception:
         instructions = default_instructions
-    agent = agents_svc.create_agent(  # type: ignore[attr-defined]
+    agent = agents_svc.create_agent(
         model=model_name,
         name="deep-research-agent",
         instructions=instructions,
@@ -151,9 +135,9 @@ def _synthesize_with_deep_research(symbols: List[str], sources_per_symbol: List[
 
     # Build prompt and run
     prompt = user_prompt.strip() if user_prompt else _build_prompt(symbols, sources_per_symbol, None)
-    thread = agents_svc.threads.create()  # type: ignore[attr-defined]
-    agents_svc.messages.create(thread_id=getattr(thread, "id", None), role="user", content=prompt)  # type: ignore[attr-defined]
-    run = agents_svc.runs.create(thread_id=getattr(thread, "id", None), agent_id=getattr(agent, "id", None))  # type: ignore[attr-defined]
+    thread = agents_svc.threads.create()
+    agents_svc.messages.create(thread_id=getattr(thread, "id", None), role="user", content=prompt)
+    run = agents_svc.runs.create(thread_id=getattr(thread, "id", None), agent_id=getattr(agent, "id", None))
 
     # Poll until completion
     for _ in range(1200):
@@ -163,16 +147,16 @@ def _synthesize_with_deep_research(symbols: List[str], sources_per_symbol: List[
         if status in ("failed", "cancelled", "expired", "timed_out", "canceled"):
             raise RuntimeError(f"DeepResearch run status: {status}")
         time.sleep(1)
-        run = agents_svc.runs.get(thread_id=getattr(thread, "id", None), run_id=getattr(run, "id", None))  # type: ignore[attr-defined]
+        run = agents_svc.runs.get(thread_id=getattr(thread, "id", None), run_id=getattr(run, "id", None))
 
     # Collect latest assistant message
     text = ""
     try:
         last_msg = None
         if hasattr(agents_svc, "messages") and hasattr(agents_svc.messages, "get_last_message_by_role"):
-            last_msg = agents_svc.messages.get_last_message_by_role(thread_id=getattr(thread, "id", None), role="assistant")  # type: ignore[attr-defined]
+            last_msg = agents_svc.messages.get_last_message_by_role(thread_id=getattr(thread, "id", None), role="assistant")
         if last_msg is None:
-            messages = agents_svc.messages.list(thread_id=getattr(thread, "id", None), order=(ListSortOrder.ASCENDING if ListSortOrder else None))  # type: ignore[attr-defined]
+            messages = agents_svc.messages.list(thread_id=getattr(thread, "id", None), order=(ListSortOrder.ASCENDING if ListSortOrder else None))
             for msg in messages:
                 if getattr(msg, "role", "") == "assistant":
                     last_msg = msg
@@ -203,7 +187,7 @@ def _synthesize_with_deep_research(symbols: List[str], sources_per_symbol: List[
         try:
             # Clean up ephemeral agent
             if hasattr(agents_svc, "delete_agent") and getattr(agent, "id", None):
-                agents_svc.delete_agent(getattr(agent, "id", None))  # type: ignore[attr-defined]
+                agents_svc.delete_agent(getattr(agent, "id", None))
         except Exception:
             pass
 
@@ -259,87 +243,59 @@ def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str
         try:
             logger.info("ai_projects: creating DefaultAzureCredential and AIProjectsClient (endpoint=%s, project_set=%s)", projects_endpoint, bool(projects_project))
             cred = DefaultAzureCredential(exclude_interactive_browser_credential=False)
-            client = AIProjectsClient(endpoint=projects_endpoint, credential=cred)  # type: ignore
-            # Resolve project-scoped agents service when available
-            project_obj = None
-            try:
-                if hasattr(client, "get_project"):
-                    project_obj = client.get_project(projects_project)  # type: ignore[attr-defined]
-                elif hasattr(client, "projects") and hasattr(client.projects, "get_project"):
-                    project_obj = client.projects.get_project(projects_project)  # type: ignore[attr-defined]
-            except Exception as _proj_e:
-                logger.debug("ai_projects: get_project failed: %s", repr(_proj_e))
-                project_obj = None
-
-            agents_svc = getattr(project_obj, "agents", None) if project_obj is not None else getattr(client, "agents", None)
-
+            client = AIProjectsClient(endpoint=projects_endpoint, credential=cred)
+            
             # Validate agent exists
-            if agents_svc is not None:
-                agent = agents_svc.get_agent(agent_id=agent_id)  # type: ignore[attr-defined]
-            else:
-                agent = getattr(client, "get_agent")(agent_id=agent_id)  # type: ignore[attr-defined]
-
-            logger.info("ai_projects: got agent response (id=%s)", getattr(agent, "id", None))
+            agent = client.agents.get_agent(agent_id=agent_id)
+            logger.info("ai_projects: got agent response (id=%s)", agent.id if agent else "none")
             if not getattr(agent, "id", None):
                 raise RuntimeError("Agent not found")
 
-            # Try simple one-shot response using available surface
+            # One-shot thread+run using typed models
+            thread_payload = AgentThreadCreationOptions(
+                messages=[ThreadMessageOptions(role="user", content=prompt)]
+            ) if (AgentThreadCreationOptions and ThreadMessageOptions) else {
+                "messages": [{"role": "user", "content": prompt}]
+            }
+            logger.info("ai_projects: calling agents.create_thread_and_process_run on agent_id=%s", agent_id)
+            run = client.agents.create_thread_and_process_run(
+                agent_id=agent_id,
+                thread=thread_payload,
+            )
+            # Collect assistant messages from the completed thread
             text = ""
-            if agents_svc is not None:
+            messages = client.agents.messages.list(
+                thread_id=getattr(run, "thread_id", None),
+                order=(ListSortOrder.ASCENDING if ListSortOrder else None),
+            )
+            collected: List[str] = []
+            for msg in messages:
+                if getattr(msg, "role", "") != "assistant":
+                    continue
                 try:
-                    thread_payload = AgentThreadCreationOptions(
-                        messages=[ThreadMessageOptions(role="user", content=prompt)]
-                    ) if (AgentThreadCreationOptions and ThreadMessageOptions) else {
-                        "messages": [{"role": "user", "content": prompt}]
-                    }
-                    logger.info("ai_projects: calling agents.create_thread_and_process_run on agent_id=%s", agent_id)
-                    run = agents_svc.create_thread_and_process_run(  # type: ignore[attr-defined]
-                        agent_id=agent_id,
-                        thread=thread_payload,
-                    )
-                    # Collect all assistant messages from the completed thread
-                    text = ""
-                    try:
-                        messages = agents_svc.messages.list(  # type: ignore[attr-defined]
-                            thread_id=getattr(run, "thread_id", None),
-                            order=(ListSortOrder.ASCENDING if ListSortOrder else None),
-                        )
-                        collected: List[str] = []
-                        for msg in messages:
-                            if getattr(msg, "role", "") != "assistant":
-                                continue
-                            # Prefer text_messages if available; otherwise parse generic content parts
-                            try:
-                                if hasattr(msg, "text_messages") and msg.text_messages:
-                                    for t in msg.text_messages:
-                                        val = getattr(getattr(t, "text", None), "value", "") or ""
-                                        if val:
-                                            if not collected or collected[-1] != val:
-                                                collected.append(val)
-                                else:
-                                    for part in getattr(msg, "content", []) or []:
-                                        if (MessageTextContent is not None) and isinstance(part, MessageTextContent):
-                                            val = getattr(getattr(part, "text", None), "value", "") or ""
-                                        elif isinstance(part, dict):
-                                            val = (part.get("text", {}) or {}).get("value", "") or ""
-                                        elif isinstance(part, str):
-                                            val = part
-                                        else:
-                                            val = ""
-                                        if val:
-                                            if not collected or collected[-1] != val:
-                                                collected.append(val)
-                            except Exception:
-                                pass
-                        if collected:
-                            text = "\n".join(collected).strip()
-                        if not text:
-                            text = getattr(run, "output_text", None) or getattr(run, "content", None) or ""
-                    except Exception as _e_list:
-                        logger.debug("ai_projects: listing messages failed: %s", repr(_e_list))
-                        text = getattr(run, "output_text", None) or getattr(run, "content", None) or ""
-                except Exception as e:
-                    logger.warning("ai_projects: create_thread_and_process_run path failed: %s", repr(e))
+                    if hasattr(msg, "text_messages") and msg.text_messages:
+                        for t in msg.text_messages:
+                            val = getattr(getattr(t, "text", None), "value", "") or ""
+                            if val and (not collected or collected[-1] != val):
+                                collected.append(val)
+                    else:
+                        for part in getattr(msg, "content", []) or []:
+                            if (MessageTextContent is not None) and isinstance(part, MessageTextContent):
+                                val = getattr(getattr(part, "text", None), "value", "") or ""
+                            elif isinstance(part, dict):
+                                val = (part.get("text", {}) or {}).get("value", "") or ""
+                            elif isinstance(part, str):
+                                val = part
+                            else:
+                                val = ""
+                            if val and (not collected or collected[-1] != val):
+                                collected.append(val)
+                except Exception:
+                    pass
+            if collected:
+                text = "\n".join(collected).strip()
+            if not text:
+                text = getattr(run, "output_text", None) or getattr(run, "content", None) or ""
             
             if not isinstance(text, str) or not text.strip():
                 raise RuntimeError("Empty agent response")
