@@ -56,6 +56,24 @@ except Exception:
 
 _md = MarkdownIt("commonmark", {"linkify": True})
 
+
+def _resolve_projects_config(mode: str):
+    """
+    Resolve Azure AI Projects endpoint/project (and agent_id for AgentMode) based on mode.
+    Falls back to Settings.* when specific env vars are not set.
+    Modes: "AgentMode", "DeepResearch"
+    """
+    if mode == "AgentMode":
+        ep = os.getenv("AZURE_AI_PROJECTS_AGENTMODE_ENDPOINT") or getattr(Settings, "AZURE_AI_PROJECTS_ENDPOINT", "")
+        pr = os.getenv("AZURE_AI_PROJECTS_AGENTMODE_PROJECT") or getattr(Settings, "AZURE_AI_PROJECTS_PROJECT", "")
+        ag = os.getenv("AZURE_AI_PROJECTS_AGENTMODE_AGENT_ID") or getattr(Settings, "AZURE_AI_PROJECTS_AGENT_ID", "")
+        return ep, pr, ag
+    if mode == "DeepResearch":
+        ep = os.getenv("AZURE_AI_PROJECTS_DEEPRESEARCH_ENDPOINT") or getattr(Settings, "AZURE_AI_PROJECTS_ENDPOINT", "")
+        pr = os.getenv("AZURE_AI_PROJECTS_DEEPRESEARCH_PROJECT") or getattr(Settings, "AZURE_AI_PROJECTS_PROJECT", "")
+        return ep, pr, None
+    return getattr(Settings, "AZURE_AI_PROJECTS_ENDPOINT", ""), getattr(Settings, "AZURE_AI_PROJECTS_PROJECT", ""), getattr(Settings, "AZURE_AI_PROJECTS_AGENT_ID", "")
+
 def _synthesize_with_deep_research(symbols: List[str], sources_per_symbol: List[Dict[str, Any]], user_prompt: Optional[str] = None) -> Dict[str, Any]:
     """
     Use Azure AI Projects Agents with the Deep Research tool to produce the report.
@@ -64,8 +82,8 @@ def _synthesize_with_deep_research(symbols: List[str], sources_per_symbol: List[
     if not (AIProjectsClient and DeepResearchTool):
         raise RuntimeError("Deep Research not available (client or tool missing)")
 
-    projects_endpoint = getattr(Settings, "AZURE_AI_PROJECTS_ENDPOINT", "")
-    projects_project = getattr(Settings, "AZURE_AI_PROJECTS_PROJECT", "")
+    projects_endpoint, projects_project, _ = _resolve_projects_config("DeepResearch")
+    logger.info("ai_projects (DeepResearch): endpoint=%r project=%r", projects_endpoint, projects_project)
     if not projects_endpoint:
         raise RuntimeError("PROJECT endpoint not configured")
 
@@ -116,7 +134,14 @@ def _synthesize_with_deep_research(symbols: List[str], sources_per_symbol: List[
         bing_grounding_connection_id=conn_id,
         deep_research_model=deep_model,
     )
-    instructions = "You are a helpful Agent that performs deep web research and produces a well-cited markdown report."
+    default_instructions = "You are a helpful Agent that performs deep web research and produces a well-cited markdown report."
+    base_dir = os.path.dirname(__file__)
+    instructions_path = os.path.join(os.path.dirname(base_dir), "deepresearch.md")
+    try:
+        with open(instructions_path, "r", encoding="utf-8") as f:
+            instructions = f.read().strip() or default_instructions
+    except Exception:
+        instructions = default_instructions
     agent = agents_svc.create_agent(  # type: ignore[attr-defined]
         model=model_name,
         name="deep-research-agent",
@@ -207,13 +232,12 @@ def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str
     prompt = _build_prompt(symbols, sources_per_symbol, user_prompt) if not user_prompt else user_prompt.strip()
 
     # 1) Preferred path: Azure AI Projects SDK
-    projects_endpoint = getattr(Settings, "AZURE_AI_PROJECTS_ENDPOINT", "")
-    projects_project = getattr(Settings, "AZURE_AI_PROJECTS_PROJECT", "")
-    agent_id = getattr(Settings, "AZURE_AI_PROJECTS_AGENT_ID", "")
+    projects_endpoint, projects_project, agent_id = _resolve_projects_config("AgentMode")
     logger.info(
         "ai_projects gating: client=%s endpoint_set=%s project_set=%s agent_set=%s",
         bool(AIProjectsClient), bool(projects_endpoint), bool(projects_project), bool(agent_id)
     )
+    logger.info("ai_projects (AgentMode): endpoint=%r project=%r agent_id=%r", projects_endpoint, projects_project, agent_id)
     # Extra diagnostics to trace why agent_set might be False
     try:
         logger.info("ai_projects Settings values: endpoint=%r project=%r agent_id=%r", projects_endpoint, projects_project, agent_id)
@@ -477,7 +501,8 @@ def synthesize_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any
 
     # 1) Prefer Azure AI Projects Agents if configured, else try Assistants
     try:
-        if (Settings.AZURE_AI_PROJECTS_ENDPOINT and Settings.AZURE_AI_PROJECTS_PROJECT and Settings.AZURE_AI_PROJECTS_AGENT_ID) or (Settings.AZURE_OAI_ASSISTANT_ID and endpoint):
+        _ep, _pr, _ag = _resolve_projects_config("AgentMode")
+        if (_ep and _pr and _ag) or (Settings.AZURE_OAI_ASSISTANT_ID and endpoint):
             logger.info("openai_agent: attempting agent/assistants path")
             return _synthesize_with_agent(symbols, sources_per_symbol, user_prompt)
     except Exception as e:
