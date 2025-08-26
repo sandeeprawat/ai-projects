@@ -94,7 +94,7 @@ const App: React.FC = () => {
 
   return (
     <div style={{ fontFamily: "Inter, system-ui, Arial", maxWidth: 960, margin: "0 auto", padding: 24 }}>
-      <h1>Stock Research</h1>
+      <h1>Deep Research Portal</h1>
 
       <section style={{ border: "1px solid #ddd", padding: 16, borderRadius: 8, marginBottom: 24 }}>
         <h2>Create Schedule</h2>

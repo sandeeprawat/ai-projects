@@ -36,7 +36,7 @@ function appShell() {
       <div class="topbar">
         <div class="brand">
           <span class="dot"></span>
-          <span>Stock Research</span>
+          <span>Deep Research Portal</span>
         </div>
         <nav class="nav">
           <a href="#/schedules" id="nav-schedules">Schedules</a>
