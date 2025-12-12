@@ -1,6 +1,6 @@
 import { listReports, deleteReport, getReport, type Report } from "../api";
 import { openReportPreview } from "../markdown";
-import { iconEye, iconTrash, iconFilePdf, iconFileHtml, iconFileMd, iconMarkdown, iconRefresh } from "../icons";
+import { iconEye, iconTrash, iconFilePdf, iconFileHtml, iconFileMd, iconMarkdown, iconRefresh, iconEmail } from "../icons";
 
 export function renderReports(root: HTMLElement) {
   root.innerHTML = "";
@@ -32,7 +32,7 @@ export function renderReports(root: HTMLElement) {
           <th>Title</th>
           <th>Symbols</th>
           <th>Created</th>
-          <th style="width:320px;">Actions</th>
+          <th style="width:420px;">Actions</th>
         </tr>
       </thead>
       <tbody id="reportsTbody">
@@ -114,6 +114,40 @@ export function renderReports(root: HTMLElement) {
         }
       } catch (err: any) {
         setStatus(`Download failed: ${err?.message ?? String(err)}`, "error");
+      }
+      return;
+    }
+
+    if (btn.classList.contains("sendEmailBtn")) {
+      const title = (tr?.querySelector("td:nth-child(2)") as HTMLElement | null)?.textContent?.trim() || "Report";
+      const emails = prompt(`Send "${title}" via email\n\nEnter recipient email addresses (comma-separated):`);
+      if (!emails || !emails.trim()) return;
+
+      setStatus("Sending email…", "info");
+      btn.disabled = true;
+      try {
+        const emailList = emails.split(",").map((e: string) => e.trim()).filter(Boolean);
+        if (emailList.length === 0) {
+          setStatus("No valid email addresses provided.", "error");
+          btn.disabled = false;
+          return;
+        }
+        const resp = await fetch(`/api/reports/${id}/send-email`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ emailTo: emailList, attachPdf: true })
+        });
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => "");
+          throw new Error(`${resp.status} ${resp.statusText} ${text}`);
+        }
+        const data = await resp.json();
+        setStatus(`Email sent to ${emailList.length} recipient(s)! (${data.instanceId || "sent"})`, "success");
+        btn.disabled = false;
+      } catch (err: any) {
+        setStatus(`Email send failed: ${err?.message ?? String(err)}`, "error");
+        btn.disabled = false;
       }
       return;
     }
@@ -229,6 +263,7 @@ export function renderReports(root: HTMLElement) {
             <td>
               <button class="previewBtn">${iconMarkdown()} Preview</button>
               <button class="viewBtn">${iconEye()} View</button>
+              <button class="sendEmailBtn" style="background:#0066cc;color:white;" title="Send via email">${iconEmail()} Email</button>
               <button class="dlBtn" data-kind="pdf" title="Download PDF">${iconFilePdf()} PDF</button>
               <button class="dlBtn secondary" data-kind="html" title="Download HTML">${iconFileHtml()} HTML</button>
               <button class="dlBtn secondary" data-kind="md" title="Download Markdown">${iconFileMd()} MD</button>

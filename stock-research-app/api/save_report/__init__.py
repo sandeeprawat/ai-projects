@@ -46,8 +46,8 @@ def main(input: Dict[str, Any]) -> Dict[str, Any]:
     attach_pdf = bool(input.get("attachPdf", False))
 
     container = Settings.REPORTS_CONTAINER or "reports"
-    # reports/{userId}/{scheduleId}/{runId}/report.*
-    prefix = f"reports/{user_id}/{schedule_id}/{run_id}".replace("//", "/")
+    # {userId}/{scheduleId}/{runId}/report.* (path within the container)
+    prefix = f"{user_id}/{schedule_id}/{run_id}".replace("//", "/")
     md_path = f"{prefix}/report.md"
     html_path = f"{prefix}/report.html"
 

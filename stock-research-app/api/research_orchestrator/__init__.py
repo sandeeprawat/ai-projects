@@ -1,7 +1,10 @@
 # Orchestrator for stock research workflow
 # Deterministic orchestration: calls activities to fetch context, synthesize report, save it, and optionally email.
 
+import logging
 import azure.durable_functions as df
+
+logger = logging.getLogger(__name__)
 
 
 def orchestrator_function(context: df.DurableOrchestrationContext):
@@ -53,7 +56,8 @@ def orchestrator_function(context: df.DurableOrchestrationContext):
     })
 
     if saved.get("emailTo"):
-        yield context.call_activity("send_email", saved)
+        email_result = yield context.call_activity("send_email", saved)
+        logger.info(f"Orchestrator: Email send result: {email_result}")
 
     return {"status": "ok", "reportId": saved.get("reportId"), "runId": run_id, "scheduleId": schedule_id}
 

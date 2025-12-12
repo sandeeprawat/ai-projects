@@ -42,3 +42,6 @@ export function iconFileMd() {
 export function iconMarkdown() {
   return svg("M3 5h18v14H3V5Zm3 9V8h2l2 2 2-2h2v6h-2v-3l-2 2-2-2v3H6Zm11 0-3-3 3-3h2v6h-2Z");
 }
+export function iconEmail() {
+  return svg("M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zm0 2 8 5 8-5M4 8v10h16V8");
+}
