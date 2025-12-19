@@ -223,6 +223,11 @@ stock-research-app/web/.eslintcache
 !.azure/README.md
 *.env.backup
 
+# Bicep generated files
+stock-research-app/infra/**/*.json
+!stock-research-app/infra/abbreviations.json
+!stock-research-app/infra/main.parameters.json
+
 # Temporary files
 stock-research-app/tmp/
 
