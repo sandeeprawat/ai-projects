@@ -35,4 +35,4 @@ resource emailDomainResource 'Microsoft.Communication/emailServices/domains@2023
 
 output name string = communicationService.name
 output connectionString string = communicationService.listKeys().primaryConnectionString
-output emailServiceName string = emailService.name
+output emailServiceName string = !empty(emailDomain) ? emailService.name : ''
