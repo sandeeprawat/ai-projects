@@ -1,0 +1,76 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+name: stock-research-app
+metadata:
+  template: stock-research-app@0.0.1-beta
+
+services:
+  api:
+    project: ./api
+    language: python
+    host: function
+    
+  web:
+    project: ./web
+    language: js
+    host: staticwebapp
+    dist: dist
+
+hooks:
+  preprovision:
+    posix:
+      shell: sh
+      run: echo "Preparing to provision Azure resources..."
+      continueOnError: false
+    windows:
+      shell: pwsh
+      run: echo "Preparing to provision Azure resources..."
+      continueOnError: false
+      
+  postprovision:
+    posix:
+      shell: sh
+      run: |
+        echo "Azure resources provisioned successfully"
+        echo "Please configure the following:"
+        echo "1. Set up Azure Communication Services email domain"
+        echo "2. Configure Azure Static Web App authentication providers (Microsoft/Google)"
+      continueOnError: false
+    windows:
+      shell: pwsh
+      run: |
+        echo "Azure resources provisioned successfully"
+        echo "Please configure the following:"
+        echo "1. Set up Azure Communication Services email domain"
+        echo "2. Configure Azure Static Web App authentication providers (Microsoft/Google)"
+      continueOnError: false
+      
+  predeploy:
+    posix:
+      shell: sh
+      run: |
+        # Install Python dependencies
+        cd api
+        pip install -r requirements.txt
+        cd ..
+        
+        # Build web frontend
+        cd web
+        npm install
+        npm run build
+        cd ..
+      continueOnError: false
+    windows:
+      shell: pwsh
+      run: |
+        # Install Python dependencies
+        cd api
+        pip install -r requirements.txt
+        cd ..
+        
+        # Build web frontend
+        cd web
+        npm install
+        npm run build
+        cd ..
+      continueOnError: false

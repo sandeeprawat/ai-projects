@@ -218,6 +218,19 @@ stock-research-app/web/dist/
 stock-research-app/web/.vite/
 stock-research-app/web/.eslintcache
 
+# Azure Developer CLI
+.azure/**/
+!.azure/README.md
+*.env.backup
+
+# Bicep generated files
+stock-research-app/infra/**/*.json
+!stock-research-app/infra/abbreviations.json
+!stock-research-app/infra/main.parameters.json
+
+# Temporary files
+stock-research-app/tmp/
+
 # OS junk
 .DS_Store
 Thumbs.db

@@ -70,19 +70,73 @@ Production-ready scaffold to research stocks on a schedule using Azure Durable F
 
 ## Deployment
 
-- Provision + deploy with Azure Developer CLI:
-  - `azd up` (from repo root) to provision resources and deploy /api and /web.
-  - GitHub Actions will be generated for CI/CD.
+### Quick Start Options
 
-## Next Steps (automation I will implement)
+Choose the method that works best for you:
 
-1) Create /api scaffold:
-   - host.json, requirements.txt
-   - Durable orchestrator and activity stubs
-   - HTTP endpoints for schedules (create) and run_now
-2) Add common utilities (config, models, openai_agent, bing, blob, cosmos, pdf, auth).
-3) Add timer trigger for due schedules.
-4) Generate minimal /web (React + Vite) with auth placeholder and simple forms.
-5) Add /infra with azd + Bicep for one-command provisioning.
+#### Option 1: Automated Setup Script (Recommended for first-time setup)
 
-Once these are committed, iterate to full features (report viewer, downloads, email, history, SWA auth providers).
+**Linux/macOS:**
+```bash
+cd stock-research-app
+chmod +x setup.sh
+./setup.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+cd stock-research-app
+.\setup.ps1
+```
+
+The setup script will:
+- Check prerequisites
+- Guide you through local development setup or Azure deployment
+- Validate infrastructure templates
+
+#### Option 2: Azure Developer CLI (azd)
+
+```bash
+cd stock-research-app
+
+# First-time: Initialize and deploy
+azd up
+
+# Subsequent deployments
+azd deploy
+```
+
+#### Option 3: VS Code Quick Deploy
+
+See [VSCODE_QUICKSTART.md](./VSCODE_QUICKSTART.md) for step-by-step VS Code deployment instructions.
+
+### Comprehensive Documentation
+
+- **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Complete deployment guide with all options
+- **[VSCODE_QUICKSTART.md](./VSCODE_QUICKSTART.md)** - VS Code-specific quick start
+- **[infra/README.md](./infra/README.md)** - Infrastructure as Code documentation
+
+### What Gets Provisioned
+
+The deployment creates these Azure resources:
+- Azure Static Web App (frontend)
+- Azure Functions App (backend)
+- Cosmos DB (database)
+- Azure Storage (blob storage)
+- Azure OpenAI (AI model)
+- Bing Search v7 (web search)
+- Azure Communication Services (email)
+- Key Vault (secrets)
+- Application Insights (monitoring)
+
+### CI/CD with GitHub Actions
+
+A GitHub Actions workflow is included at `.github/workflows/azure-deploy.yml` for automated deployments on push to main branch.
+
+Required secrets:
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
+- `AZURE_SUBSCRIPTION_ID`
+- `AZURE_LOCATION`
+
+Or use `AZURE_CREDENTIALS` for service principal authentication.

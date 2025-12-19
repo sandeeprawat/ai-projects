@@ -134,6 +134,143 @@
         "clear": false
       },
       "problemMatcher": "$func-python-watch"
+    },
+    {
+      "label": "azd: provision",
+      "type": "shell",
+      "command": "azd",
+      "args": [
+        "provision"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/stock-research-app"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "azd: deploy",
+      "type": "shell",
+      "command": "azd",
+      "args": [
+        "deploy"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/stock-research-app"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "azd: up (provision + deploy)",
+      "type": "shell",
+      "command": "azd",
+      "args": [
+        "up"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/stock-research-app"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "azd: down (delete resources)",
+      "type": "shell",
+      "command": "azd",
+      "args": [
+        "down"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/stock-research-app"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "bicep: validate infrastructure",
+      "type": "shell",
+      "command": "az",
+      "args": [
+        "deployment",
+        "sub",
+        "validate",
+        "--location",
+        "eastus",
+        "--template-file",
+        "infra/main.bicep",
+        "--parameters",
+        "infra/main.parameters.json"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/stock-research-app"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "web: build",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "build"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/stock-research-app/web"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": false,
+        "clear": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "api: install dependencies",
+      "type": "shell",
+      "command": "pip",
+      "args": [
+        "install",
+        "-r",
+        "requirements.txt"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/stock-research-app/api"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": false,
+        "clear": false
+      },
+      "problemMatcher": []
     }    
   ]
 }

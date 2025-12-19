@@ -1,0 +1,14 @@
+{
+  "resourcesResourceGroups": "rg-",
+  "storageStorageAccounts": "st",
+  "documentDBDatabaseAccounts": "cosmos-",
+  "keyVaultVaults": "kv-",
+  "cognitiveServicesAccounts": "cog-",
+  "webSitesFunctions": "func-",
+  "webServerFarms": "plan-",
+  "webStaticSites": "stapp-",
+  "operationalInsightsWorkspaces": "log-",
+  "insightsComponents": "appi-",
+  "communicationServices": "acs-",
+  "communicationServicesEmailServices": "email-"
+}
