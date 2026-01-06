@@ -1,0 +1,7 @@
+{
+  "webServerFarms": "plan-",
+  "webSitesFunctions": "func-",
+  "webStaticSites": "stapp-",
+  "storageStorageAccounts": "st",
+  "documentDBDatabaseAccounts": "cosmos-"
+}

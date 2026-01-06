@@ -376,7 +376,7 @@ def _synthesize_with_deep_research(symbols: List[str], sources_per_symbol: List[
         raise RuntimeError("Empty DeepResearch agent response")
 
     title_line = next((line.strip("# ").strip() for line in text.splitlines() if line.startswith("# ")), None)
-    title = title_line or f"Stock Research Report: {', '.join(symbols) or 'Prompted'}"
+    title = title_line or f"Deep Research Report: {', '.join(symbols) or 'Prompted'}"
     ann_citations: List[Dict[str, str]] = []
     try:
         marker_map = _build_marker_map(last_msg) if last_msg is not None else {}
@@ -541,7 +541,7 @@ def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str
                 raise RuntimeError("Empty agent response")
 
             title_line = next((line.strip("# ").strip() for line in text.splitlines() if line.startswith("# ")), None)
-            title = title_line or f"Stock Research Report: {', '.join(symbols) or 'Prompted'}"
+            title = title_line or f"Deep Research Report: {', '.join(symbols) or 'Prompted'}"
             ann_citations: List[Dict[str, str]] = []
             try:
                 if marker_map:
@@ -633,7 +633,7 @@ def _synthesize_with_agent(symbols: List[str], sources_per_symbol: List[Dict[str
             raise RuntimeError("No assistant response content")
 
         title_line = next((line.strip("# ").strip() for line in text.splitlines() if line.startswith("# ")), None)
-        title = title_line or f"Stock Research Report: {', '.join(symbols) or 'Prompted'}"
+        title = title_line or f"Deep Research Report: {', '.join(symbols) or 'Prompted'}"
         md = text
         html = _md.render(md)
 
@@ -668,7 +668,7 @@ def _build_prompt(symbols: List[str], sources_per_symbol: List[Dict[str, Any]], 
     return "\n".join(lines)
 
 def _fallback_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any]], user_prompt: Optional[str] = None) -> Tuple[str, str, List[Dict[str, str]]]:
-    title = f"Stock Research Report: {', '.join(symbols) or 'Prompted'}"
+    title = f"Deep Research Report: {', '.join(symbols) or 'Prompted'}"
     citations: List[Dict[str, str]] = []
     idx = 1
     sections: List[str] = [f"# {title}", ""]
@@ -749,7 +749,7 @@ def synthesize_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any
             if not text:
                 raise RuntimeError("Empty completion")
             title_line = next((line.strip("# ").strip() for line in text.splitlines() if line.startswith("# ")), None)
-            title = title_line or f"Stock Research Report: {', '.join(symbols) or 'Prompted'}"
+            title = title_line or f"Deep Research Report: {', '.join(symbols) or 'Prompted'}"
             md = text
             html = _md.render(md)
 

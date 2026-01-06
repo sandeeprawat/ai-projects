@@ -8,12 +8,12 @@ This repository contains production-ready AI applications built with Azure servi
 
 ## 🚀 Projects
 
-### Stock Research Application
+### Deep Research Application
 
-A production-ready application for researching stocks on a schedule using Azure Durable Functions and Azure OpenAI-powered agents with Bing Web Search integration.
+A production-ready application for deep research on a schedule using Azure Durable Functions and Azure OpenAI-powered agents with Bing Web Search integration.
 
 **Key Features:**
-- Automated stock research with scheduled recurrences
+- Automated deep research with scheduled recurrences
 - AI-powered report generation (Markdown/HTML/PDF)
 - User authentication (Microsoft/Google)
 - Email delivery of research reports
@@ -26,7 +26,7 @@ A production-ready application for researching stocks on a schedule using Azure 
 - **Data:** Cosmos DB + Azure Blob Storage
 - **Infrastructure:** Azure Developer CLI (azd) + Bicep
 
-[📖 View Stock Research App Documentation](./stock-research-app/README.md)
+[📖 View Deep Research App Documentation](./stock-research-app/README.md)
 
 ## 🛠️ Getting Started
 
@@ -43,7 +43,7 @@ A production-ready application for researching stocks on a schedule using Azure 
 
 ```
 .
-├── stock-research-app/       # Stock research application
+├── stock-research-app/       # Deep research application
 │   ├── api/                  # Azure Functions (Python)
 │   ├── web/                  # React frontend
 │   ├── scripts/              # Utility scripts
@@ -73,7 +73,7 @@ A production-ready application for researching stocks on a schedule using Azure 
 
 Each project contains its own comprehensive documentation:
 
-- **Stock Research App:** [stock-research-app/README.md](./stock-research-app/README.md)
+- **Deep Research App:** [stock-research-app/README.md](./stock-research-app/README.md)
 
 ## 🔒 Security
 

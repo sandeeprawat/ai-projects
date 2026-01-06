@@ -21,6 +21,10 @@ class Settings:
     COSMOS_DB_KEY = _val("COSMOS_DB_KEY")
     COSMOS_DB_NAME = os.getenv("COSMOS_DB_NAME", "stockresearch")
 
+    # Storage settings for Managed Identity
+    AZURE_STORAGE_ACCOUNT_NAME = os.getenv("AZURE_STORAGE_ACCOUNT_NAME", "")
+    AZURE_CLIENT_ID = os.getenv("AZURE_CLIENT_ID", "")  # User-assigned managed identity client ID
+
     REPORTS_CONTAINER = os.getenv("REPORTS_CONTAINER", "reports")
     REPORT_RETENTION_DAYS = os.getenv("REPORT_RETENTION_DAYS", "0")
 

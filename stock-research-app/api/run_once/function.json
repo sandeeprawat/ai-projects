@@ -5,8 +5,15 @@
       "type": "httpTrigger",
       "direction": "in",
       "name": "req",
-      "methods": ["put"],
-      "route": "schedules/{id}"
+      "methods": [
+        "post"
+      ],
+      "route": "run-once"
+    },
+    {
+      "type": "durableClient",
+      "name": "starter",
+      "direction": "in"
     },
     {
       "type": "http",

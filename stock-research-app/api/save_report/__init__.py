@@ -38,7 +38,7 @@ def main(input: Dict[str, Any]) -> Dict[str, Any]:
     symbols = input.get("symbols") or []
     prompt = input.get("prompt") or None
     r = input.get("report") or {}
-    title = r.get("title") or f"Stock Research Report"
+    title = r.get("title") or f"Deep Research Report"
     md = r.get("markdown") or ""
     html = r.get("html") or ""
     citations = r.get("citations") or []

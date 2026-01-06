@@ -76,7 +76,7 @@ async def main(req: func.HttpRequest, starter: str) -> func.HttpResponse:
         "reportId": report_id,
         "blobPaths": doc.get("blobPaths", {}),
         "emailTo": valid_emails,
-        "title": doc.get("title", "Stock Research Report"),
+        "title": doc.get("title", "Deep Research Report"),
         "userId": user_id
     }
 

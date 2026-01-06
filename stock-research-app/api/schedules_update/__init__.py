@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from ..common.auth import get_user_context
-from ..common.cosmos import _ensure_store, _save_store
+from ..common.cosmos import update_schedule
 import azure.functions as func
 
 def main(req):
@@ -12,16 +12,9 @@ def main(req):
     schedule_id = req.route_params.get("id")
     body = req.get_json()
 
-    db = _ensure_store()
-    found = False
-    for s in db.get("schedules", []):
-        if s.get("id") == schedule_id and s.get("userId") == user_id:
-            s.update(body)
-            found = True
-            break
+    found = update_schedule(schedule_id, user_id, body)
 
     if found:
-        _save_store(db)
         return func.HttpResponse(
             json.dumps({"message": "Schedule updated", "id": schedule_id}),
             status_code=200,

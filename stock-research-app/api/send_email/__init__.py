@@ -49,7 +49,7 @@ def main(input: Dict[str, Any]) -> Dict[str, Any]:
     """
     input = input or {}
     recipients: List[str] = [x for x in (input.get("emailTo") or []) if isinstance(x, str) and x.strip()]
-    title: str = input.get("title") or "Stock Research Report"
+    title: str = input.get("title") or "Deep Research Report"
     blob_paths: Dict[str, str] = input.get("blobPaths") or {}
     container = Settings.REPORTS_CONTAINER or "reports"
 
@@ -90,7 +90,7 @@ def main(input: Dict[str, Any]) -> Dict[str, Any]:
 <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px;">
   <div style="background: #f5f5f5; padding: 12px; margin-bottom: 20px; border-radius: 6px; border-left: 4px solid #0066cc;">
     <p style="margin: 0 0 8px 0; font-weight: bold;">📊 {title}</p>
-    <p style="margin: 0; font-size: 14px; color: #666;">Your stock research report is ready. Download other formats:</p>
+    <p style="margin: 0; font-size: 14px; color: #666;">Your deep research report is ready. Download other formats:</p>
     <div style="margin-top: 8px;">
 """
         if md_url:
@@ -111,7 +111,7 @@ def main(input: Dict[str, Any]) -> Dict[str, Any]:
         # Fallback to links-only format if HTML not available
         html_parts = [
             f"<h2>{title}</h2>",
-            "<p>Your scheduled stock research report is ready.</p>",
+            "<p>Your scheduled deep research report is ready.</p>",
             "<ul>"
         ]
         if html_url:
@@ -137,7 +137,7 @@ def main(input: Dict[str, Any]) -> Dict[str, Any]:
     to_list = [{"address": x} for x in recipients]
     message: Dict[str, Any] = {
         "senderAddress": Settings.EMAIL_SENDER,
-        "content": {"subject": f"[Stock Research] {title}", "html": body_html},
+        "content": {"subject": f"[Deep Research] {title}", "html": body_html},
         "recipients": {"to": to_list},
     }
     if attachments:

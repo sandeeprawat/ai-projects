@@ -103,7 +103,7 @@ function toProxiedUrl(u: string): string {
 
 async function fetchText(url: string): Promise<string> {
   const target = toProxiedUrl(url);
-  const res = await fetch(target, { credentials: "include" });
+  const res = await fetch(target);
   if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
   return await res.text();
 }

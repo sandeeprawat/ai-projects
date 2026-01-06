@@ -4,6 +4,7 @@ import {
   updateSchedule,
   deleteSchedule,
   runScheduleNow,
+  runOnce,
   listReports,
   getReport,
   type Schedule,
@@ -140,7 +141,8 @@ export function renderSchedules(root: HTMLElement) {
       </div>
 
       <div class="col-12" style="display:flex; gap:8px; margin-top:8px;">
-        <button id="createBtn" class="primary">Create</button>
+        <button id="createBtn" class="primary">Create Schedule</button>
+        <button id="runOnceBtn" class="secondary">${iconPlay()} Run Once</button>
         <button id="updateBtn" class="primary" style="display:none;">Save</button>
         <button id="cancelEditBtn" class="secondary" style="display:none;">Cancel</button>
         <button id="resetBtn" class="secondary">Reset</button>
@@ -180,6 +182,7 @@ export function renderSchedules(root: HTMLElement) {
   const tbody = tableCard.querySelector<HTMLTableSectionElement>("#schedulesTbody")!;
   const formTitle = formCard.querySelector<HTMLElement>("#formTitle")!;
   const createBtn = formCard.querySelector<HTMLButtonElement>("#createBtn")!;
+  const runOnceBtn = formCard.querySelector<HTMLButtonElement>("#runOnceBtn")!;
   const updateBtn = formCard.querySelector<HTMLButtonElement>("#updateBtn")!;
   const cancelEditBtn = formCard.querySelector<HTMLButtonElement>("#cancelEditBtn")!;
   const resetBtn = formCard.querySelector<HTMLButtonElement>("#resetBtn")!;
@@ -217,6 +220,7 @@ export function renderSchedules(root: HTMLElement) {
     deepResearchEl.checked = false;
     activeEl.checked = true;
     createBtn.style.display = "";
+    runOnceBtn.style.display = "";
     updateBtn.style.display = "none";
     cancelEditBtn.style.display = "none";
     setStatus("");
@@ -275,6 +279,7 @@ export function renderSchedules(root: HTMLElement) {
     activeEl.checked = !!s.active;
 
     createBtn.style.display = "none";
+    runOnceBtn.style.display = "none";
     updateBtn.style.display = "";
     cancelEditBtn.style.display = "";
   }
@@ -541,6 +546,30 @@ export function renderSchedules(root: HTMLElement) {
       setStatus(`Create failed: ${e?.message ?? String(e)}`, "error");
     } finally {
       createBtn.disabled = false;
+    }
+  });
+
+  runOnceBtn.addEventListener("click", async () => {
+    const input = readForm();
+    if (!input.prompt && !input.symbols.length) {
+      setStatus("Prompt or symbols are required.", "error");
+      return;
+    }
+    runOnceBtn.disabled = true;
+    setStatus("Starting one-time research run…", "info");
+    try {
+      const result = await runOnce({
+        prompt: input.prompt,
+        symbols: input.symbols,
+        emailTo: input.email.to,
+        attachPdf: input.email.attachPdf,
+        deepResearch: input.deepResearch
+      });
+      setStatus(`Research started! Run ID: ${result.runId}`, "success");
+    } catch (e: any) {
+      setStatus(`Run failed: ${e?.message ?? String(e)}`, "error");
+    } finally {
+      runOnceBtn.disabled = false;
     }
   });
 

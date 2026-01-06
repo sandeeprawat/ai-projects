@@ -1,4 +1,4 @@
-# Orchestrator for stock research workflow
+# Orchestrator for deep research workflow
 # Deterministic orchestration: calls activities to fetch context, synthesize report, save it, and optionally email.
 
 import logging

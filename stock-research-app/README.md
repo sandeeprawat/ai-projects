@@ -1,6 +1,6 @@
-# Stock Research Application (Azure Durable Functions + Azure OpenAI)
+# Deep Research Application (Azure Durable Functions + Azure OpenAI)
 
-Production-ready scaffold to research stocks on a schedule using Azure Durable Functions and an Azure OpenAI-powered agent with Bing Web Search. Generates detailed reports (Markdown/HTML/PDF), stores history, and can email results. UI supports login with Microsoft/Google and scheduling recurrences.
+Production-ready scaffold for deep research on a schedule using Azure Durable Functions and an Azure OpenAI-powered agent with Bing Web Search. Generates detailed reports (Markdown/HTML/PDF), stores history, and can email results. UI supports login with Microsoft/Google and scheduling recurrences.
 
 ## Architecture
 

@@ -1,22 +1,44 @@
 import { getToken } from "./auth";
 
+// Detect if running on Azure Static Web Apps (Free tier doesn't support linked backends)
+// In production, call the Function App directly; in local dev, use the Vite proxy
+function getApiBase(): string {
+  // Check for explicit env override first
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  // If on azurestaticapps.net, use the Function App directly
+  if (typeof window !== "undefined" && window.location.hostname.includes("azurestaticapps.net")) {
+    return "https://azfunc2jlbwmzknw6uc.azurewebsites.net";
+  }
+  // Local dev - use relative /api (Vite proxy handles it)
+  return "";
+}
+
+const API_BASE = getApiBase();
+
+function buildUrl(path: string): string {
+  if (path.startsWith("http")) return path;
+  const apiPath = path.startsWith("/") ? path : `/${path}`;
+  return API_BASE ? `${API_BASE}/api${apiPath}` : `/api${apiPath}`;
+}
+
 export async function getJson<T = any>(path: string): Promise<T> {
-  const url = path.startsWith("http") ? path : `/api${path.startsWith("/") ? path : `/${path}`}`;
+  const url = buildUrl(path);
   const t = getToken();
   const headers: Record<string, string> = { Accept: "application/json" };
   if (t) headers["Authorization"] = `Bearer ${t}`;
 
   const res = await fetch(url, {
     method: "GET",
-    headers,
-    credentials: "include"
+    headers
   });
   if (!res.ok) throw new Error(`GET ${url} failed: ${res.status} ${res.statusText}`);
   return (await res.json()) as T;
 }
 
 export async function postJson<T = any>(path: string, body: any): Promise<T> {
-  const url = path.startsWith("http") ? path : `/api${path.startsWith("/") ? path : `/${path}`}`;
+  const url = buildUrl(path);
   const t = getToken();
   const headers: Record<string, string> = { Accept: "application/json", "Content-Type": "application/json" };
   if (t) headers["Authorization"] = `Bearer ${t}`;
@@ -24,7 +46,6 @@ export async function postJson<T = any>(path: string, body: any): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
     headers,
-    credentials: "include",
     body: JSON.stringify(body ?? {})
   });
   if (!res.ok) {
@@ -35,7 +56,7 @@ export async function postJson<T = any>(path: string, body: any): Promise<T> {
 }
 
 export async function putJson<T = any>(path: string, body: any): Promise<T> {
-  const url = path.startsWith("http") ? path : `/api${path.startsWith("/") ? path : `/${path}`}`;
+  const url = buildUrl(path);
   const t = getToken();
   const headers: Record<string, string> = { Accept: "application/json", "Content-Type": "application/json" };
   if (t) headers["Authorization"] = `Bearer ${t}`;
@@ -43,7 +64,6 @@ export async function putJson<T = any>(path: string, body: any): Promise<T> {
   const res = await fetch(url, {
     method: "PUT",
     headers,
-    credentials: "include",
     body: JSON.stringify(body ?? {})
   });
   if (!res.ok) {
@@ -54,15 +74,14 @@ export async function putJson<T = any>(path: string, body: any): Promise<T> {
 }
 
 export async function delJson<T = any>(path: string): Promise<T> {
-  const url = path.startsWith("http") ? path : `/api${path.startsWith("/") ? path : `/${path}`}`;
+  const url = buildUrl(path);
   const t = getToken();
   const headers: Record<string, string> = { Accept: "application/json" };
   if (t) headers["Authorization"] = `Bearer ${t}`;
 
   const res = await fetch(url, {
     method: "DELETE",
-    headers,
-    credentials: "include"
+    headers
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -173,4 +192,20 @@ export async function deleteReport(reportId: string): Promise<{ deleted: boolean
 
 export async function deleteSchedule(scheduleId: string): Promise<{ deleted: boolean; scheduleId: string }> {
   return delJson<{ deleted: boolean; scheduleId: string }>(`/schedules/${encodeURIComponent(scheduleId)}`);
+}
+
+export async function runOnce(input: {
+  prompt: string;
+  symbols?: string[];
+  emailTo?: string[];
+  attachPdf?: boolean;
+  deepResearch?: boolean;
+}): Promise<{ instanceId: string; runId: string; message: string }> {
+  return postJson("/run-once", {
+    prompt: input.prompt,
+    symbols: input.symbols ?? [],
+    emailTo: input.emailTo ?? [],
+    attachPdf: input.attachPdf ?? false,
+    deepResearch: input.deepResearch ?? false
+  });
 }

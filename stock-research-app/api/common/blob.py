@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from azure.storage.blob import (
@@ -8,11 +8,36 @@ from azure.storage.blob import (
     ContentSettings,
     generate_blob_sas,
     BlobSasPermissions,
+    UserDelegationKey,
 )
 
 from .config import get_storage_connection_string, Settings
 
+# Cache for user delegation key
+_user_delegation_key: Optional[UserDelegationKey] = None
+_user_delegation_key_expiry: Optional[datetime] = None
+
+
+def _get_credential():
+    """Get credential for Managed Identity if configured."""
+    if Settings.AZURE_STORAGE_ACCOUNT_NAME and Settings.AZURE_CLIENT_ID:
+        from azure.identity import ManagedIdentityCredential
+        return ManagedIdentityCredential(client_id=Settings.AZURE_CLIENT_ID)
+    elif Settings.AZURE_STORAGE_ACCOUNT_NAME:
+        from azure.identity import DefaultAzureCredential
+        return DefaultAzureCredential()
+    return None
+
+
 def _svc() -> BlobServiceClient:
+    # Check if we should use Managed Identity
+    if Settings.AZURE_STORAGE_ACCOUNT_NAME:
+        credential = _get_credential()
+        if credential:
+            account_url = f"https://{Settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net"
+            return BlobServiceClient(account_url, credential=credential)
+    
+    # Fall back to connection string
     conn = get_storage_connection_string()
     if conn.strip().lower() == "usedevelopmentstorage=true":
         # Expand Azurite shorthand into a full connection string azure-storage-blob can parse
@@ -71,8 +96,43 @@ def _try_parse_account_from_conn_str(conn_str: str) -> tuple[Optional[str], Opti
 
 def make_read_sas_url(container: str, blob_path: str, expiry_hours: int = 48) -> Optional[str]:
     """
-    Builds a read-only SAS URL for the given blob. Returns None if credentials are unavailable.
+    Builds a read-only SAS URL for the given blob. 
+    Uses User Delegation SAS with Managed Identity when available, otherwise falls back to account key.
+    Returns None if credentials are unavailable.
     """
+    global _user_delegation_key, _user_delegation_key_expiry
+    
+    expiry_time = datetime.now(timezone.utc) + timedelta(hours=max(1, int(expiry_hours)))
+    
+    # Try Managed Identity with User Delegation SAS first
+    if Settings.AZURE_STORAGE_ACCOUNT_NAME:
+        try:
+            svc = _svc()
+            account_name = Settings.AZURE_STORAGE_ACCOUNT_NAME
+            blob_endpoint = f"https://{account_name}.blob.core.windows.net"
+            
+            # Get or refresh user delegation key (valid for up to 7 days, we refresh every 6 hours)
+            now = datetime.now(timezone.utc)
+            if _user_delegation_key is None or _user_delegation_key_expiry is None or now >= _user_delegation_key_expiry:
+                key_start = now - timedelta(minutes=5)  # Start slightly in the past
+                key_expiry = now + timedelta(hours=6)   # 6-hour validity
+                _user_delegation_key = svc.get_user_delegation_key(key_start, key_expiry)
+                _user_delegation_key_expiry = key_expiry
+            
+            from azure.storage.blob import generate_blob_sas
+            sas = generate_blob_sas(
+                account_name=account_name,
+                container_name=container,
+                blob_name=blob_path,
+                user_delegation_key=_user_delegation_key,
+                permission=BlobSasPermissions(read=True),
+                expiry=expiry_time,
+            )
+            return f"{blob_endpoint}/{container}/{blob_path}?{sas}"
+        except Exception:
+            # Fall through to connection string method
+            pass
+    
     conn = get_storage_connection_string()
 
     # Handle Azurite shorthand
@@ -100,7 +160,7 @@ def make_read_sas_url(container: str, blob_path: str, expiry_hours: int = 48) ->
             blob_name=blob_path,
             account_key=account_key,
             permission=BlobSasPermissions(read=True),
-            expiry=datetime.utcnow() + timedelta(hours=max(1, int(expiry_hours))),
+            expiry=expiry_time,
         )
         return f"{blob_endpoint}/{container}/{blob_path}?{sas}"
     except Exception:
