@@ -119,7 +119,6 @@ def make_read_sas_url(container: str, blob_path: str, expiry_hours: int = 48) ->
                 _user_delegation_key = svc.get_user_delegation_key(key_start, key_expiry)
                 _user_delegation_key_expiry = key_expiry
             
-            from azure.storage.blob import generate_blob_sas
             sas = generate_blob_sas(
                 account_name=account_name,
                 container_name=container,
