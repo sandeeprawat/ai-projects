@@ -169,18 +169,19 @@ resource monitoringMetricsPublisherRole 'Microsoft.Authorization/roleAssignments
   }
 }
 
-// App Service Plan (Consumption)
+// App Service Plan (Premium Elastic - for longer function timeouts)
 resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
   name: 'azplan${resourceToken}'
   location: location
   tags: tags
   sku: {
-    name: 'Y1'
-    tier: 'Dynamic'
+    name: 'EP1'
+    tier: 'ElasticPremium'
   }
-  kind: 'functionapp'
+  kind: 'elastic'
   properties: {
     reserved: true
+    maximumElasticWorkerCount: 1
   }
 }
 

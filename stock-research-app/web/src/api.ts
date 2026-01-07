@@ -9,7 +9,7 @@ function getApiBase(): string {
   }
   // If on azurestaticapps.net, use the Function App directly
   if (typeof window !== "undefined" && window.location.hostname.includes("azurestaticapps.net")) {
-    return "https://azfunc2jlbwmzknw6uc.azurewebsites.net";
+    return "https://azfunc-stock-premium.azurewebsites.net";
   }
   // Local dev - use relative /api (Vite proxy handles it)
   return "";

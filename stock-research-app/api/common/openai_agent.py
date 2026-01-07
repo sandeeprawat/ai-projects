@@ -247,30 +247,33 @@ def _synthesize_with_deep_research(symbols: List[str], sources_per_symbol: List[
     model_name = os.getenv("MODEL_DEPLOYMENT_NAME") or getattr(Settings, "AZURE_OPENAI_DEPLOYMENT", "") or "gpt-4o"
     deep_model = os.getenv("DEEP_RESEARCH_MODEL_DEPLOYMENT_NAME") or "o3-deep-research"
 
-    conn_id = os.getenv("AZURE_BING_CONNECTION_ID") or os.getenv("AZURE_BING_CONECTION_ID") or ""
+    conn_id = ""
+    bing_name = os.getenv("BING_RESOURCE_NAME", "")
     try:
-        if not conn_id:
-            # Optionally resolve by name via project connections
-            bing_name = os.getenv("BING_RESOURCE_NAME", "")
-            if bing_name:
-                cred = DefaultAzureCredential(exclude_interactive_browser_credential=False)
-                client_tmp = AIProjectsClient(endpoint=projects_endpoint, credential=cred)
+        if bing_name:
+            cred = DefaultAzureCredential(exclude_interactive_browser_credential=False)
+            client_tmp = AIProjectsClient(endpoint=projects_endpoint, credential=cred)
+            logger.info("ai_projects: attempting to resolve Bing connection by name=%r", bing_name)
+            project_obj = None
+            try:
+                if hasattr(client_tmp, "get_project"):
+                    project_obj = client_tmp.get_project(projects_project)
+                elif hasattr(client_tmp, "projects") and hasattr(client_tmp.projects, "get_project"):
+                    project_obj = client_tmp.projects.get_project(projects_project)
+            except Exception as pe:
+                logger.debug("ai_projects: get_project failed: %s", repr(pe))
                 project_obj = None
-                try:
-                    if hasattr(client_tmp, "get_project"):
-                        project_obj = client_tmp.get_project(projects_project)
-                    elif hasattr(client_tmp, "projects") and hasattr(client_tmp.projects, "get_project"):
-                        project_obj = client_tmp.projects.get_project(projects_project)
-                except Exception:
-                    project_obj = None
-                connections_svc = getattr(project_obj, "connections", None) if project_obj is not None else getattr(client_tmp, "connections", None)
-                if connections_svc is not None and hasattr(connections_svc, "get"):
-                    conn = connections_svc.get(name=bing_name)
-                    conn_id = getattr(conn, "id", "") or ""
-    except Exception:
-        pass
+            connections_svc = getattr(project_obj, "connections", None) if project_obj is not None else getattr(client_tmp, "connections", None)
+            logger.info("ai_projects: connections_svc=%s (from project_obj=%s)", type(connections_svc).__name__ if connections_svc else None, project_obj is not None)
+            if connections_svc is not None and hasattr(connections_svc, "get"):
+                conn = connections_svc.get(name=bing_name)
+                conn_id = getattr(conn, "id", "") or ""
+                logger.info("ai_projects: resolved Bing connection id=%r", conn_id)
+    except Exception as e:
+        logger.warning("ai_projects: failed to resolve Bing connection: %s", repr(e))
+    
     if not conn_id:
-        raise RuntimeError("Bing connection id not configured (AZURE_BING_CONNECTION_ID or BING_RESOURCE_NAME)")
+        raise RuntimeError(f"Bing connection id not configured - could not resolve BING_RESOURCE_NAME={bing_name!r} to a connection id")
 
     cred = DefaultAzureCredential(exclude_interactive_browser_credential=False)
     client = AIProjectsClient(endpoint=projects_endpoint, credential=cred)
