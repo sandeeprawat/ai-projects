@@ -44,6 +44,34 @@ param emailSender string
 @description('Bing Search API key (optional)')
 param bingV7Key string = ''
 
+// Azure AI Projects settings for Deep Research
+@description('Azure AI Projects endpoint for Deep Research')
+param azureAiProjectsDeepResearchEndpoint string = ''
+
+@description('Azure AI Projects project name for Deep Research')
+param azureAiProjectsDeepResearchProject string = ''
+
+@description('Model deployment name for Deep Research')
+param deepResearchModelDeploymentName string = 'o3-deep-research'
+
+// Azure AI Projects settings for Agent Mode
+@description('Azure AI Projects endpoint for Agent Mode')
+param azureAiProjectsAgentModeEndpoint string = ''
+
+@description('Azure AI Projects project name for Agent Mode')
+param azureAiProjectsAgentModeProject string = ''
+
+@description('Azure AI Projects Agent ID for Agent Mode')
+param azureAiProjectsAgentModeAgentId string = ''
+
+// Model deployment name
+@description('Default model deployment name')
+param modelDeploymentName string = 'gpt-4o'
+
+// Bing resource name
+@description('Bing resource name for Azure AI connection')
+param bingResourceName string = ''
+
 var resourceToken = uniqueString(subscription().id, location, environmentName)
 var tags = { 'azd-env-name': environmentName }
 
@@ -72,6 +100,14 @@ module resources 'resources.bicep' = {
     acsConnectionString: acsConnectionString
     emailSender: emailSender
     bingV7Key: bingV7Key
+    azureAiProjectsDeepResearchEndpoint: azureAiProjectsDeepResearchEndpoint
+    azureAiProjectsDeepResearchProject: azureAiProjectsDeepResearchProject
+    deepResearchModelDeploymentName: deepResearchModelDeploymentName
+    azureAiProjectsAgentModeEndpoint: azureAiProjectsAgentModeEndpoint
+    azureAiProjectsAgentModeProject: azureAiProjectsAgentModeProject
+    azureAiProjectsAgentModeAgentId: azureAiProjectsAgentModeAgentId
+    modelDeploymentName: modelDeploymentName
+    bingResourceName: bingResourceName
   }
 }
 

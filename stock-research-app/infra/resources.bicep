@@ -28,6 +28,22 @@ param emailSender string
 @secure()
 param bingV7Key string
 
+// Azure AI Projects settings for Deep Research
+param azureAiProjectsDeepResearchEndpoint string = ''
+param azureAiProjectsDeepResearchProject string = ''
+param deepResearchModelDeploymentName string = 'o3-deep-research'
+
+// Azure AI Projects settings for Agent Mode
+param azureAiProjectsAgentModeEndpoint string = ''
+param azureAiProjectsAgentModeProject string = ''
+param azureAiProjectsAgentModeAgentId string = ''
+
+// Model deployment name
+param modelDeploymentName string = 'gpt-4o'
+
+// Bing resource name for Azure AI connection
+param bingResourceName string = ''
+
 // User-Assigned Managed Identity (required by AZD)
 resource userIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'azid${resourceToken}'
@@ -269,6 +285,38 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
         {
           name: 'APP_BASE_URL'
           value: 'https://azfunc${resourceToken}.azurewebsites.net'
+        }
+        {
+          name: 'AZURE_AI_PROJECTS_DEEPRESEARCH_ENDPOINT'
+          value: azureAiProjectsDeepResearchEndpoint
+        }
+        {
+          name: 'AZURE_AI_PROJECTS_DEEPRESEARCH_PROJECT'
+          value: azureAiProjectsDeepResearchProject
+        }
+        {
+          name: 'DEEP_RESEARCH_MODEL_DEPLOYMENT_NAME'
+          value: deepResearchModelDeploymentName
+        }
+        {
+          name: 'AZURE_AI_PROJECTS_AGENTMODE_ENDPOINT'
+          value: azureAiProjectsAgentModeEndpoint
+        }
+        {
+          name: 'AZURE_AI_PROJECTS_AGENTMODE_PROJECT'
+          value: azureAiProjectsAgentModeProject
+        }
+        {
+          name: 'AZURE_AI_PROJECTS_AGENTMODE_AGENT_ID'
+          value: azureAiProjectsAgentModeAgentId
+        }
+        {
+          name: 'MODEL_DEPLOYMENT_NAME'
+          value: modelDeploymentName
+        }
+        {
+          name: 'BING_RESOURCE_NAME'
+          value: bingResourceName
         }
       ]
       cors: {

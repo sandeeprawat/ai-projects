@@ -34,6 +34,30 @@
     },
     "bingV7Key": {
       "value": "${BING_V7_KEY}"
+    },
+    "azureAiProjectsDeepResearchEndpoint": {
+      "value": "${AZURE_AI_PROJECTS_DEEPRESEARCH_ENDPOINT}"
+    },
+    "azureAiProjectsDeepResearchProject": {
+      "value": "${AZURE_AI_PROJECTS_DEEPRESEARCH_PROJECT}"
+    },
+    "deepResearchModelDeploymentName": {
+      "value": "${DEEP_RESEARCH_MODEL_DEPLOYMENT_NAME}"
+    },
+    "azureAiProjectsAgentModeEndpoint": {
+      "value": "${AZURE_AI_PROJECTS_AGENTMODE_ENDPOINT}"
+    },
+    "azureAiProjectsAgentModeProject": {
+      "value": "${AZURE_AI_PROJECTS_AGENTMODE_PROJECT}"
+    },
+    "azureAiProjectsAgentModeAgentId": {
+      "value": "${AZURE_AI_PROJECTS_AGENTMODE_AGENT_ID}"
+    },
+    "modelDeploymentName": {
+      "value": "${MODEL_DEPLOYMENT_NAME}"
+    },
+    "bingResourceName": {
+      "value": "${BING_RESOURCE_NAME}"
     }
   }
 }
