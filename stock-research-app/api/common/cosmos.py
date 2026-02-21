@@ -7,7 +7,7 @@ from typing import Any, Dict, Iterable, List, Optional
 from uuid import uuid4
 from datetime import datetime, timezone
 
-from .models import Schedule, Run, Report
+from .models import Schedule, Run, Report, TrackedStock
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Determine storage mode: Cosmos DB (cloud) vs local JSON file (dev)
@@ -89,13 +89,16 @@ def _ensure_store() -> Dict[str, Any]:
     if not _DATA_DIR.exists():
         _DATA_DIR.mkdir(parents=True, exist_ok=True)
     if not _DATA_FILE.exists():
-        initial = {"schedules": [], "runs": [], "reports": []}
+        initial = {"schedules": [], "runs": [], "reports": [], "tracked_stocks": []}
         _DATA_FILE.write_text(json.dumps(initial, indent=2), encoding="utf-8")
         return initial
     try:
-        return json.loads(_DATA_FILE.read_text(encoding="utf-8"))
+        data = json.loads(_DATA_FILE.read_text(encoding="utf-8"))
+        if "tracked_stocks" not in data:
+            data["tracked_stocks"] = []
+        return data
     except Exception:
-        initial = {"schedules": [], "runs": [], "reports": []}
+        initial = {"schedules": [], "runs": [], "reports": [], "tracked_stocks": []}
         _DATA_FILE.write_text(json.dumps(initial, indent=2), encoding="utf-8")
         return initial
 
@@ -452,3 +455,108 @@ def list_all_reports() -> List[Dict[str, Any]]:
     else:
         db = _ensure_store()
         return list(db.get("reports", []))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tracked Stocks
+# ─────────────────────────────────────────────────────────────────────────────
+
+def get_tracked_stock_by_symbol(user_id: str, symbol: str) -> Optional[Dict[str, Any]]:
+    """Return the existing tracked stock for a user+symbol, or None."""
+    if USE_COSMOS:
+        container = _get_cosmos_container("tracked_stocks")
+        query = "SELECT * FROM c WHERE c.userId = @userId AND c.symbol = @symbol"
+        items = list(container.query_items(
+            query=query,
+            parameters=[
+                {"name": "@userId", "value": user_id},
+                {"name": "@symbol", "value": symbol}
+            ],
+            enable_cross_partition_query=True
+        ))
+        return dict(items[0]) if items else None
+    else:
+        db = _ensure_store()
+        for ts in db.get("tracked_stocks", []):
+            if ts.get("userId") == user_id and ts.get("symbol") == symbol:
+                return ts
+        return None
+
+
+def create_tracked_stock(stock: TrackedStock) -> Dict[str, Any]:
+    """Create a tracked stock. If the symbol already exists for this user,
+    keep the one with the earlier recommendationDate (dedup)."""
+    existing = get_tracked_stock_by_symbol(stock.userId, stock.symbol)
+    if existing:
+        # Keep the earlier recommendation
+        if existing.get("recommendationDate", "") <= stock.recommendationDate:
+            return existing
+        # New one is earlier – replace
+        delete_tracked_stock(existing["id"], stock.userId)
+
+    data = stock.model_dump()
+    data["id"] = data.get("id") or str(uuid4())
+    data["createdAt"] = _now_iso()
+
+    if USE_COSMOS:
+        container = _get_cosmos_container("tracked_stocks")
+        container.create_item(body=data)
+        return data
+    else:
+        db = _ensure_store()
+        db["tracked_stocks"].append(data)
+        _save_store(db)
+        return data
+
+
+def list_tracked_stocks_for_user(user_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    if USE_COSMOS:
+        container = _get_cosmos_container("tracked_stocks")
+        query = """
+            SELECT * FROM c
+            WHERE c.userId = @userId
+            ORDER BY c.symbol ASC
+            OFFSET 0 LIMIT @limit
+        """
+        items = list(container.query_items(
+            query=query,
+            parameters=[
+                {"name": "@userId", "value": user_id},
+                {"name": "@limit", "value": limit}
+            ],
+            enable_cross_partition_query=True
+        ))
+        return [dict(i) for i in items]
+    else:
+        db = _ensure_store()
+        items: List[Dict[str, Any]] = []
+        for ts in db.get("tracked_stocks", []):
+            if ts.get("userId") == user_id:
+                items.append(ts)
+        items.sort(key=lambda x: x.get("symbol", ""))
+        return items[:limit]
+
+
+def delete_tracked_stock(stock_id: str, user_id: str) -> bool:
+    if USE_COSMOS:
+        container = _get_cosmos_container("tracked_stocks")
+        try:
+            container.delete_item(item=stock_id, partition_key=user_id)
+            return True
+        except Exception:
+            return False
+    else:
+        db = _ensure_store()
+        stocks = db.get("tracked_stocks", [])
+        kept: List[Dict[str, Any]] = []
+        deleted = False
+        for ts in stocks:
+            if ts.get("id") == stock_id and ts.get("userId") == user_id:
+                deleted = True
+            else:
+                kept.append(ts)
+        if not deleted:
+            return False
+        db["tracked_stocks"] = kept
+        _save_store(db)
+        return True

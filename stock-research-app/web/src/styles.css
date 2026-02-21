@@ -208,3 +208,23 @@ table.table { width: 100%; border-collapse: collapse; min-width: 720px; }
 .markdown-body table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
 .markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: 6px 8px; }
 .markdown-body blockquote { margin: 0.5em 0; padding: 6px 10px; border-left: 3px solid var(--primary); background: var(--primary-50); }
+
+/* Performance tracker */
+.perf-form .form-row {
+  display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start;
+}
+.perf-form .form-row label { flex: 1; min-width: 140px; }
+.perf-form input[type="date"] {
+  width: 100%;
+  background: #ffffff;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  outline: none;
+}
+[data-theme="dark"] .perf-form input[type="date"] { background: #0b1220; color: var(--text); border: 1px solid var(--border); }
+.required { color: var(--danger); }
+td.positive, .positive { color: var(--success); font-weight: 600; }
+td.negative, .negative { color: var(--danger); font-weight: 600; }
+.muted { color: var(--muted); font-style: italic; }

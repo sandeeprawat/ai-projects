@@ -1,6 +1,7 @@
 import { getUser, initGoogle, clearToken, getToken } from "./auth";
 import { renderReports } from "./pages/reports";
 import { renderSchedules } from "./pages/schedules";
+import { renderPerformance } from "./pages/performance";
 
 type Theme = "light" | "dark";
 
@@ -41,6 +42,7 @@ function appShell() {
         <nav class="nav">
           <a href="#/schedules" id="nav-schedules">Schedules</a>
           <a href="#/reports" id="nav-reports">Reports</a>
+          <a href="#/performance" id="nav-performance">Performance</a>
         </nav>
         <div style="display:flex;align-items:center;gap:8px;">
           <button id="themeToggle" class="secondary" title="Toggle theme">Dark</button>
@@ -58,7 +60,8 @@ function setActiveNav() {
   const hash = location.hash || "#/schedules";
   const navs = [
     { id: "nav-schedules", href: "#/schedules" },
-    { id: "nav-reports", href: "#/reports" }
+    { id: "nav-reports", href: "#/reports" },
+    { id: "nav-performance", href: "#/performance" }
   ];
   for (const n of navs) {
     const a = document.getElementById(n.id) as HTMLAnchorElement | null;
@@ -132,6 +135,8 @@ function route() {
   // Render requested page
   if (hash.startsWith("#/reports")) {
     renderReports(pageRoot);
+  } else if (hash.startsWith("#/performance")) {
+    renderPerformance(pageRoot);
   } else {
     renderSchedules(pageRoot);
   }

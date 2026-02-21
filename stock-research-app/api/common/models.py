@@ -83,3 +83,14 @@ class Report(BaseModel):
     citations: List[Dict[str, Any]] = Field(default_factory=list)
     status: str = "complete"
     createdAt: Optional[str] = None
+
+
+class TrackedStock(BaseModel):
+    id: Optional[str] = None
+    userId: str
+    symbol: str
+    reportTitle: Optional[str] = None
+    reportId: Optional[str] = None
+    recommendationDate: str  # ISO date string (YYYY-MM-DD)
+    recommendationPrice: float
+    createdAt: Optional[str] = None

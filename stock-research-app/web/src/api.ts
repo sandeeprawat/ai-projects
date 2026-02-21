@@ -1,15 +1,12 @@
 import { getToken } from "./auth";
 
-// Detect if running on Azure Static Web Apps (Free tier doesn't support linked backends)
-// In production, call the Function App directly; in local dev, use the Vite proxy
+// API URL is configured via VITE_API_URL environment variable
+// - Production: Set in .env.production (e.g., https://your-function-app.azurewebsites.net)
+// - Local dev: Empty string, Vite proxy handles /api requests
 function getApiBase(): string {
-  // Check for explicit env override first
+  // Use env variable (set at build time via .env.production or VITE_API_URL)
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
-  }
-  // If on azurestaticapps.net, use the Function App directly
-  if (typeof window !== "undefined" && window.location.hostname.includes("azurestaticapps.net")) {
-    return "https://azfunc-stock-premium.azurewebsites.net";
   }
   // Local dev - use relative /api (Vite proxy handles it)
   return "";
@@ -208,4 +205,43 @@ export async function runOnce(input: {
     attachPdf: input.attachPdf ?? false,
     deepResearch: input.deepResearch ?? false
   });
+}
+
+/* ── Tracked Stocks (Performance Dashboard) ─────────────────────────────── */
+
+export type TrackedStock = {
+  id: string;
+  userId: string;
+  symbol: string;
+  reportTitle?: string | null;
+  reportId?: string | null;
+  recommendationDate: string;
+  recommendationPrice: number;
+  createdAt?: string | null;
+};
+
+export async function listTrackedStocks(limit = 100): Promise<TrackedStock[]> {
+  return getJson<TrackedStock[]>(`/tracked-stocks?limit=${encodeURIComponent(String(limit))}`);
+}
+
+export async function createTrackedStock(input: {
+  symbol: string;
+  reportTitle?: string;
+  reportId?: string;
+  recommendationDate: string;
+  recommendationPrice: number;
+}): Promise<TrackedStock> {
+  return postJson<TrackedStock>("/tracked-stocks", input);
+}
+
+export async function deleteTrackedStock(stockId: string): Promise<{ deleted: boolean; stockId: string }> {
+  return delJson<{ deleted: boolean; stockId: string }>(`/tracked-stocks/${encodeURIComponent(stockId)}`);
+}
+
+export async function fetchStockPrices(symbols: string[]): Promise<Record<string, number | null>> {
+  if (!symbols.length) return {};
+  const res = await getJson<{ prices: Record<string, number | null> }>(
+    `/tracked-stocks/prices?symbols=${encodeURIComponent(symbols.join(","))}`
+  );
+  return res.prices;
 }
