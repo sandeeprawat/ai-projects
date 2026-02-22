@@ -146,7 +146,9 @@ export function renderPerformance(root: HTMLElement) {
         return `
           <tr data-id="${s.id}">
             <td><strong>${escapeHtml(s.symbol)}</strong></td>
-            <td>${escapeHtml(s.reportTitle || "—")}</td>
+            <td>${s.reportId
+              ? `<a href="#/reports?highlight=${encodeURIComponent(s.reportId)}" class="report-link" title="View report">${escapeHtml(s.reportTitle || "View Report")}</a>`
+              : escapeHtml(s.reportTitle || "—")}</td>
             <td>${fmtDate(s.recommendationDate)}</td>
             <td style="text-align:right;">${fmtPrice(s.recommendationPrice)}</td>
             <td style="text-align:right;">${curPrice != null ? fmtPrice(curPrice) : '<span class="muted">loading…</span>'}</td>

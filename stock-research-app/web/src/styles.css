@@ -228,3 +228,5 @@ table.table { width: 100%; border-collapse: collapse; min-width: 720px; }
 td.positive, .positive { color: var(--success); font-weight: 600; }
 td.negative, .negative { color: var(--danger); font-weight: 600; }
 .muted { color: var(--muted); font-style: italic; }
+.report-link { color: var(--primary); text-decoration: none; }
+.report-link:hover { text-decoration: underline; }

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
 from typing import Dict, Any
 from datetime import datetime, timezone
 from ..common.config import Settings
 from ..common import blob as blob_util
 from ..common import pdf as pdf_util
-from ..common.models import Report
-from ..common.cosmos import save_report as cosmos_save_report
+from ..common.models import Report, TrackedStock
+from ..common.cosmos import save_report as cosmos_save_report, create_tracked_stock
+from ..common.prices import fetch_prices
+
+logger = logging.getLogger(__name__)
 
 def main(input: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -78,6 +82,10 @@ def main(input: Dict[str, Any]) -> Dict[str, Any]:
     )
     saved = cosmos_save_report(report_doc)
 
+    # Auto-track stocks in the performance dashboard
+    if symbols:
+        _auto_track_stocks(symbols, saved, user_id)
+
     return {
         "reportId": saved["id"],
         "blobPaths": blob_paths,
@@ -85,3 +93,33 @@ def main(input: Dict[str, Any]) -> Dict[str, Any]:
         "title": title,
         "userId": user_id
     }
+
+
+def _auto_track_stocks(symbols: list, saved: Dict[str, Any], user_id: str) -> None:
+    """Create tracked stock entries for each symbol in the report."""
+    try:
+        rec_date = (saved.get("createdAt") or "")[:10]  # YYYY-MM-DD
+        report_id = saved.get("id", "")
+        report_title = saved.get("title", "")
+        prices = fetch_prices(symbols)
+
+        for sym in symbols:
+            sym = sym.strip().upper()
+            if not sym:
+                continue
+            price = prices.get(sym)
+            if price is None:
+                logger.warning("Skipping auto-track for %s: price unavailable", sym)
+                continue
+            stock = TrackedStock(
+                userId=user_id,
+                symbol=sym,
+                reportTitle=report_title,
+                reportId=report_id,
+                recommendationDate=rec_date,
+                recommendationPrice=price,
+            )
+            create_tracked_stock(stock)
+            logger.info("Auto-tracked %s at $%.2f from report %s", sym, price, report_id)
+    except Exception as exc:
+        logger.warning("Auto-track stocks failed (non-fatal): %s", exc)
