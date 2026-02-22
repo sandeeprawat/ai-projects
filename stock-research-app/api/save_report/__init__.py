@@ -8,7 +8,7 @@ from ..common import blob as blob_util
 from ..common import pdf as pdf_util
 from ..common.models import Report, TrackedStock
 from ..common.cosmos import save_report as cosmos_save_report, create_tracked_stock
-from ..common.prices import fetch_prices
+from ..common.prices import fetch_prices, extract_stock_recommendations
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +83,8 @@ def main(input: Dict[str, Any]) -> Dict[str, Any]:
     saved = cosmos_save_report(report_doc)
 
     # Auto-track stocks in the performance dashboard
-    if symbols:
-        _auto_track_stocks(symbols, saved, user_id)
+    if symbols or md:
+        _auto_track_stocks(md, saved, user_id)
 
     return {
         "reportId": saved["id"],
@@ -95,18 +95,30 @@ def main(input: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _auto_track_stocks(symbols: list, saved: Dict[str, Any], user_id: str) -> None:
-    """Create tracked stock entries for each symbol in the report."""
+def _auto_track_stocks(markdown: str, saved: Dict[str, Any], user_id: str) -> None:
+    """Use GPT to check if the report is stock-related and extract recommended
+    symbols from the output, then create tracked stock entries."""
     try:
+        extraction = extract_stock_recommendations(markdown)
+        if not extraction.get("isStockRelated"):
+            logger.info("Report %s is not stock-related, skipping auto-track", saved.get("id"))
+            return
+
+        extracted_symbols = [
+            s["symbol"].strip().upper()
+            for s in extraction.get("stocks", [])
+            if s.get("symbol", "").strip()
+        ]
+        if not extracted_symbols:
+            logger.info("Report %s is stock-related but no symbols extracted", saved.get("id"))
+            return
+
         rec_date = (saved.get("createdAt") or "")[:10]  # YYYY-MM-DD
         report_id = saved.get("id", "")
         report_title = saved.get("title", "")
-        prices = fetch_prices(symbols)
+        prices = fetch_prices(extracted_symbols)
 
-        for sym in symbols:
-            sym = sym.strip().upper()
-            if not sym:
-                continue
+        for sym in extracted_symbols:
             price = prices.get(sym)
             if price is None:
                 logger.warning("Skipping auto-track for %s: price unavailable", sym)
