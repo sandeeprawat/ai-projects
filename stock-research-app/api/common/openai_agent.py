@@ -50,7 +50,7 @@ try:
 except Exception:
     pass
 
-_md = MarkdownIt("commonmark", {"linkify": True, "html": True})
+_md = MarkdownIt("gfm-like", {"linkify": False, "html": True})
 
 def _normalize_url(u: str) -> str:
     """
