@@ -38,7 +38,11 @@ def main(input: Dict[str, Any]) -> Dict[str, Any]:
     symbols = input.get("symbols") or []
     prompt = input.get("prompt") or None
     r = input.get("report") or {}
-    title = r.get("title") or f"Deep Research Report"
+    schedule_title = input.get("scheduleTitle") or ""
+    title = r.get("title") or ""
+    # Use AI-generated report title if meaningful, else fall back to schedule title
+    if not title or title.startswith("Deep Research Report:"):
+        title = schedule_title or title or "Deep Research Report"
     md = r.get("markdown") or ""
     html = r.get("html") or ""
     citations = r.get("citations") or []

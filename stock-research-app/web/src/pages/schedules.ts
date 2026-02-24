@@ -295,10 +295,11 @@ export function renderSchedules(root: HTMLElement) {
         const cad = `${s.recurrence?.cadence || ""} x${s.recurrence?.interval ?? 1}`.trim();
         const nxt = fmtDate(s.nextRunAt);
         const promptShort = (s.prompt || "").slice(0, 80);
+        const displayTitle = s.title || promptShort;
         return `
           <tr data-id="${escapeHtml(s.id || "")}">
             <td>
-              <div title="${escapeHtml(s.prompt || "")}">${escapeHtml(promptShort)}${(s.prompt || "").length > 80 ? "…" : ""}</div>
+              <div title="${escapeHtml(s.prompt || "")}"><strong>${escapeHtml(s.title || "")}</strong>${s.title ? "<br>" : ""}${escapeHtml(promptShort)}${(s.prompt || "").length > 80 ? "…" : ""}</div>
             </td>
             <td>${escapeHtml(sym)}</td>
             <td><span class="badge">${escapeHtml(cad)}</span>${s.deepResearch ? ' <span class="badge">Deep</span>' : ''}</td>

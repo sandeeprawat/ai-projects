@@ -10,6 +10,7 @@ import azure.durable_functions as df
 from ..common.auth import get_user_context
 from ..common.models import Schedule, Recurrence, EmailSettings, compute_next_run_utc
 from ..common.cosmos import create_schedule as cosmos_create_schedule
+from ..common.ai_helpers import generate_title
 
 async def main(req: func.HttpRequest, starter: str) -> func.HttpResponse:
     try:
@@ -59,6 +60,12 @@ async def main(req: func.HttpRequest, starter: str) -> func.HttpResponse:
         deepResearch=bool(body.get("deepResearch", False)),
         active=bool(body.get("active", True)),
     )
+
+    # Generate a descriptive title from the prompt using AI
+    title = generate_title(prompt, symbols or None)
+    if title:
+        sched.title = title
+
     # compute next run
     sched.nextRunAt = compute_next_run_utc(recurrence)
 

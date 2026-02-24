@@ -53,6 +53,7 @@ def compute_next_run_utc(rec: Recurrence, now: Optional[datetime] = None) -> str
 class Schedule(BaseModel):
     id: Optional[str] = None
     userId: str
+    title: Optional[str] = None
     prompt: Optional[str] = None
     symbols: List[str] = Field(default_factory=list)
     recurrence: Recurrence = Field(default_factory=Recurrence)

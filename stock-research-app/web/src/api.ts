@@ -105,6 +105,7 @@ export type EmailSettings = {
 export type Schedule = {
   id?: string;
   userId?: string;
+  title?: string;
   prompt?: string;
   symbols: string[];
   recurrence: Recurrence;

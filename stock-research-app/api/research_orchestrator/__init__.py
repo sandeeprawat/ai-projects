@@ -24,6 +24,7 @@ def orchestrator_function(context: df.DurableOrchestrationContext):
     attach_pdf = bool(input_.get("attachPdf", False))
     deep_research = bool(input_.get("deepResearch", False))
     prompt = (input_.get("prompt") or "")
+    schedule_title = (input_.get("scheduleTitle") or "")
 
     sources_per_symbol = []
     if symbols:
@@ -52,7 +53,8 @@ def orchestrator_function(context: df.DurableOrchestrationContext):
         "userId": user_id,
         "symbols": symbols,
         "prompt": prompt,
-        "attachPdf": attach_pdf
+        "attachPdf": attach_pdf,
+        "scheduleTitle": schedule_title
     })
 
     if saved.get("emailTo"):

@@ -52,6 +52,7 @@ async def main(req: func.HttpRequest, starter: str) -> func.HttpResponse:
         "userId": user_id,
         "attachPdf": attach_pdf,
         "deepResearch": deep_research,
+        "scheduleTitle": sched.get("title") or "",
     }
 
     client = df.DurableOrchestrationClient(starter)

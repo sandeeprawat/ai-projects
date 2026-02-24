@@ -48,6 +48,7 @@ async def main(mytimer: func.TimerRequest, starter: str) -> None:
                 "emailTo": email_to,
                 "userId": user_id,
                 "attachPdf": attach_pdf,
+                "scheduleTitle": sched.get("title") or "",
             }
             await client.start_new("research_orchestrator", None, orch_input)
 
