@@ -461,17 +461,26 @@ def list_all_reports() -> List[Dict[str, Any]]:
 # Tracked Stocks
 # ─────────────────────────────────────────────────────────────────────────────
 
-def get_tracked_stock_by_symbol(user_id: str, symbol: str) -> Optional[Dict[str, Any]]:
-    """Return the existing tracked stock for a user+symbol, or None."""
+def get_tracked_stock_by_symbol(user_id: str, symbol: str, report_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Return the existing tracked stock for a user+symbol+reportId, or None."""
     if USE_COSMOS:
         container = _get_cosmos_container("tracked_stocks")
-        query = "SELECT * FROM c WHERE c.userId = @userId AND c.symbol = @symbol"
-        items = list(container.query_items(
-            query=query,
-            parameters=[
+        if report_id:
+            query = "SELECT * FROM c WHERE c.userId = @userId AND c.symbol = @symbol AND c.reportId = @reportId"
+            params = [
+                {"name": "@userId", "value": user_id},
+                {"name": "@symbol", "value": symbol},
+                {"name": "@reportId", "value": report_id}
+            ]
+        else:
+            query = "SELECT * FROM c WHERE c.userId = @userId AND c.symbol = @symbol AND (NOT IS_DEFINED(c.reportId) OR c.reportId = null)"
+            params = [
                 {"name": "@userId", "value": user_id},
                 {"name": "@symbol", "value": symbol}
-            ],
+            ]
+        items = list(container.query_items(
+            query=query,
+            parameters=params,
             enable_cross_partition_query=True
         ))
         return dict(items[0]) if items else None
@@ -479,14 +488,18 @@ def get_tracked_stock_by_symbol(user_id: str, symbol: str) -> Optional[Dict[str,
         db = _ensure_store()
         for ts in db.get("tracked_stocks", []):
             if ts.get("userId") == user_id and ts.get("symbol") == symbol:
-                return ts
+                if report_id:
+                    if ts.get("reportId") == report_id:
+                        return ts
+                else:
+                    if not ts.get("reportId"):
+                        return ts
         return None
 
 
 def create_tracked_stock(stock: TrackedStock) -> Dict[str, Any]:
-    """Create a tracked stock. If the symbol already exists for this user,
-    keep the one with the earlier recommendationDate (dedup)."""
-    existing = get_tracked_stock_by_symbol(stock.userId, stock.symbol)
+    """Create a tracked stock. Dedup by (userId, symbol, reportId)."""
+    existing = get_tracked_stock_by_symbol(stock.userId, stock.symbol, stock.reportId)
     if existing:
         # Keep the earlier recommendation
         if existing.get("recommendationDate", "") <= stock.recommendationDate:

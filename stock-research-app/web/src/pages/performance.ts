@@ -7,6 +7,8 @@ import {
 } from "../api";
 import { iconTrash, iconRefresh } from "../icons";
 
+const INDIAN_EXCHANGES = new Set(["NSE", "BSE"]);
+
 export function renderPerformance(root: HTMLElement) {
   root.innerHTML = "";
   const container = document.createElement("div");
@@ -31,7 +33,17 @@ export function renderPerformance(root: HTMLElement) {
       <div class="form-row">
         <label>
           Symbol <span class="required">*</span>
-          <input type="text" id="fSymbol" placeholder="e.g. AAPL" required style="text-transform:uppercase;" />
+          <input type="text" id="fSymbol" placeholder="e.g. RELIANCE" required style="text-transform:uppercase;" />
+        </label>
+        <label>
+          Exchange
+          <select id="fExchange">
+            <option value="">Auto / US</option>
+            <option value="NSE">NSE (India)</option>
+            <option value="BSE">BSE (India)</option>
+            <option value="NASDAQ">NASDAQ</option>
+            <option value="NYSE">NYSE</option>
+          </select>
         </label>
         <label>
           Report Title
@@ -106,7 +118,6 @@ export function renderPerformance(root: HTMLElement) {
   function fmtDate(s?: string | null) {
     if (!s) return "";
     try {
-      // Handle YYYY-MM-DD dates directly
       if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
         const [y, m, d] = s.split("-");
         return `${m}/${d}/${y}`;
@@ -117,9 +128,18 @@ export function renderPerformance(root: HTMLElement) {
     }
   }
 
-  function fmtPrice(n: number | null | undefined): string {
+  function currencySymbol(exchange?: string | null): string {
+    return INDIAN_EXCHANGES.has((exchange || "").toUpperCase()) ? "₹" : "$";
+  }
+
+  function fmtPrice(n: number | null | undefined, exchange?: string | null): string {
     if (n == null) return "—";
-    return "$" + n.toFixed(2);
+    return currencySymbol(exchange) + n.toFixed(2);
+  }
+
+  /** Count how many reports reference this symbol */
+  function reportsForSymbol(symbol: string): TrackedStock[] {
+    return stocks.filter((s) => s.symbol === symbol);
   }
 
   function renderRows() {
@@ -133,23 +153,35 @@ export function renderPerformance(root: HTMLElement) {
         let changeTd = "—";
         let changePctTd = "—";
         let changeClass = "";
+        const cs = currencySymbol(s.exchange);
 
         if (curPrice != null && s.recommendationPrice > 0) {
           const change = curPrice - s.recommendationPrice;
           const pct = (change / s.recommendationPrice) * 100;
           changeClass = change >= 0 ? "positive" : "negative";
           const sign = change >= 0 ? "+" : "";
-          changeTd = `${sign}$${change.toFixed(2)}`;
+          changeTd = `${sign}${cs}${Math.abs(change).toFixed(2)}`;
           changePctTd = `${sign}${pct.toFixed(2)}%`;
         }
 
+        const exchBadge = s.exchange ? `<span class="badge">${escapeHtml(s.exchange)}</span> ` : "";
+        const sameSymbolCount = reportsForSymbol(s.symbol).length;
+        const symbolLink = sameSymbolCount > 1
+          ? `<a href="#" class="symbolLink" data-symbol="${escapeHtml(s.symbol)}">${escapeHtml(s.symbol)}</a>`
+          : `<strong>${escapeHtml(s.symbol)}</strong>`;
+
+        // Report link
+        const reportCell = s.reportId
+          ? `<a href="#/reports?highlight=${encodeURIComponent(s.reportId)}" class="report-link" title="View report">${escapeHtml(s.reportTitle || "View Report")}</a>`
+          : escapeHtml(s.reportTitle || "—");
+
         return `
           <tr data-id="${s.id}">
-            <td><strong>${escapeHtml(s.symbol)}</strong></td>
-            <td>${escapeHtml(s.reportTitle || "—")}</td>
+            <td>${exchBadge}${symbolLink}</td>
+            <td>${reportCell}</td>
             <td>${fmtDate(s.recommendationDate)}</td>
-            <td style="text-align:right;">${fmtPrice(s.recommendationPrice)}</td>
-            <td style="text-align:right;">${curPrice != null ? fmtPrice(curPrice) : '<span class="muted">loading…</span>'}</td>
+            <td style="text-align:right;">${fmtPrice(s.recommendationPrice, s.exchange)}</td>
+            <td style="text-align:right;">${curPrice != null ? fmtPrice(curPrice, s.exchange) : '<span class="muted">loading…</span>'}</td>
             <td style="text-align:right;" class="${changeClass}">${changeTd}</td>
             <td style="text-align:right;" class="${changeClass}">${changePctTd}</td>
             <td>
@@ -182,16 +214,61 @@ export function renderPerformance(root: HTMLElement) {
         }
       });
     });
+
+    // Symbol click → show all reports for that symbol
+    tbody.querySelectorAll<HTMLAnchorElement>(".symbolLink").forEach((link) => {
+      link.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        const sym = link.getAttribute("data-symbol") || "";
+        const related = reportsForSymbol(sym);
+        if (!related.length) return;
+        const list = related
+          .map((r) => {
+            const title = escapeHtml(r.reportTitle || "Untitled");
+            const date = fmtDate(r.recommendationDate);
+            const price = fmtPrice(r.recommendationPrice, r.exchange);
+            const link = r.reportId
+              ? `<a href="#/reports?highlight=${encodeURIComponent(r.reportId)}" class="report-link">${title}</a>`
+              : title;
+            return `<li>${link} — ${date} at ${price}</li>`;
+          })
+          .join("");
+        showSymbolPopup(sym, list);
+      });
+    });
+  }
+
+  function showSymbolPopup(symbol: string, listHtml: string) {
+    // Remove any existing popup
+    document.querySelector(".symbol-popup-backdrop")?.remove();
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop symbol-popup-backdrop";
+    backdrop.innerHTML = `
+      <div class="modal" style="width:min(600px,90vw);max-height:60vh;">
+        <div class="modal-header">
+          <span class="modal-title">Reports for ${escapeHtml(symbol)}</span>
+          <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <ul style="margin:0;padding-left:20px;">${listHtml}</ul>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+    backdrop.querySelector(".modal-close")?.addEventListener("click", () => backdrop.remove());
+    backdrop.addEventListener("click", (e) => { if (e.target === backdrop) backdrop.remove(); });
   }
 
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     const symbolEl = form.querySelector<HTMLInputElement>("#fSymbol")!;
+    const exchangeEl = form.querySelector<HTMLSelectElement>("#fExchange")!;
     const reportTitleEl = form.querySelector<HTMLInputElement>("#fReportTitle")!;
     const recDateEl = form.querySelector<HTMLInputElement>("#fRecDate")!;
     const recPriceEl = form.querySelector<HTMLInputElement>("#fRecPrice")!;
 
     const symbol = symbolEl.value.trim().toUpperCase();
+    const exchange = exchangeEl.value.trim().toUpperCase() || undefined;
     const reportTitle = reportTitleEl.value.trim();
     const recDate = recDateEl.value;
     const recPrice = parseFloat(recPriceEl.value);
@@ -208,18 +285,16 @@ export function renderPerformance(root: HTMLElement) {
     try {
       const created = await createTrackedStock({
         symbol,
+        exchange,
         reportTitle: reportTitle || undefined,
         recommendationDate: recDate,
         recommendationPrice: recPrice,
       });
-      // Replace if dedup returned existing, otherwise add
-      const idx = stocks.findIndex((s) => s.symbol === created.symbol);
-      if (idx >= 0) stocks[idx] = created;
-      else stocks.push(created);
+      stocks.push(created);
       stocks.sort((a, b) => a.symbol.localeCompare(b.symbol));
 
       // Fetch price for new symbol
-      loadPrices([created.symbol]);
+      loadPrices([created]);
 
       renderRows();
       form.reset();
@@ -233,14 +308,25 @@ export function renderPerformance(root: HTMLElement) {
 
   refreshBtn.addEventListener("click", () => load());
 
-  async function loadPrices(symbols?: string[]) {
-    const syms = symbols ?? stocks.map((s) => s.symbol);
-    if (!syms.length) return;
+  async function loadPrices(subset?: TrackedStock[]) {
+    const items = subset ?? stocks;
+    if (!items.length) return;
+    // Deduplicate symbols for price fetch
+    const seen = new Set<string>();
+    const syms: string[] = [];
+    const exchs: string[] = [];
+    for (const s of items) {
+      if (!seen.has(s.symbol)) {
+        seen.add(s.symbol);
+        syms.push(s.symbol);
+        exchs.push(s.exchange || "");
+      }
+    }
     try {
-      const fetched = await fetchStockPrices(syms);
+      const fetched = await fetchStockPrices(syms, exchs);
       prices = { ...prices, ...fetched };
       renderRows();
-    } catch (err: any) {
+    } catch {
       // Silently fail price fetch — rows will show "loading…"
     }
   }
@@ -252,7 +338,6 @@ export function renderPerformance(root: HTMLElement) {
       prices = {};
       renderRows();
       setStatus("");
-      // Fetch current prices in background
       loadPrices();
     } catch (err: any) {
       tbody.innerHTML = `<tr><td colspan="8">Failed to load: ${escapeHtml(err?.message ?? String(err))}</td></tr>`;

@@ -90,6 +90,7 @@ class TrackedStock(BaseModel):
     id: Optional[str] = None
     userId: str
     symbol: str
+    exchange: Optional[str] = None  # e.g. NSE, BSE, NASDAQ, NYSE
     reportTitle: Optional[str] = None
     reportId: Optional[str] = None
     recommendationDate: str  # ISO date string (YYYY-MM-DD)

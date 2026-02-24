@@ -214,6 +214,7 @@ export type TrackedStock = {
   id: string;
   userId: string;
   symbol: string;
+  exchange?: string | null;
   reportTitle?: string | null;
   reportId?: string | null;
   recommendationDate: string;
@@ -227,6 +228,7 @@ export async function listTrackedStocks(limit = 100): Promise<TrackedStock[]> {
 
 export async function createTrackedStock(input: {
   symbol: string;
+  exchange?: string;
   reportTitle?: string;
   reportId?: string;
   recommendationDate: string;
@@ -239,10 +241,10 @@ export async function deleteTrackedStock(stockId: string): Promise<{ deleted: bo
   return delJson<{ deleted: boolean; stockId: string }>(`/tracked-stocks/${encodeURIComponent(stockId)}`);
 }
 
-export async function fetchStockPrices(symbols: string[]): Promise<Record<string, number | null>> {
+export async function fetchStockPrices(symbols: string[], exchanges: string[]): Promise<Record<string, number | null>> {
   if (!symbols.length) return {};
   const res = await getJson<{ prices: Record<string, number | null> }>(
-    `/tracked-stocks/prices?symbols=${encodeURIComponent(symbols.join(","))}`
+    `/tracked-stocks/prices?symbols=${encodeURIComponent(symbols.join(","))}&exchanges=${encodeURIComponent(exchanges.join(","))}`
   );
   return res.prices;
 }

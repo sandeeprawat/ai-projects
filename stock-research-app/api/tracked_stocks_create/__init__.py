@@ -57,6 +57,7 @@ async def main(req: func.HttpRequest) -> func.HttpResponse:
     stock = TrackedStock(
         userId=user_id,
         symbol=symbol,
+        exchange=(body.get("exchange") or "").strip().upper() or None,
         reportTitle=body.get("reportTitle"),
         reportId=body.get("reportId"),
         recommendationDate=recommendation_date,
