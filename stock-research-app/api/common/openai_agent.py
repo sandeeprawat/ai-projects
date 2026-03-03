@@ -665,7 +665,30 @@ def _build_prompt(symbols: List[str], sources_per_symbol: List[Dict[str, Any]], 
     if symbols:
         lines.append(f"Symbols: {', '.join(symbols)}")
         lines.append("")
-    
+
+    # Include source data so the model has context for the report
+    if sources_per_symbol:
+        lines.append("## Reference Materials")
+        lines.append("")
+        ref_num = 1
+        for entry in sources_per_symbol:
+            label = entry.get("symbol") or entry.get("prompt", "General")
+            lines.append(f"### {label}")
+            for src in entry.get("sources", []):
+                title = src.get("title", "Untitled")
+                url = src.get("url", "")
+                excerpt = src.get("excerpt", "")
+                if len(excerpt) > 500:
+                    excerpt = excerpt[:500] + "..."
+                lines.append(f"[{ref_num}] {title}")
+                if url:
+                    lines.append(f"    URL: {url}")
+                if excerpt:
+                    lines.append(f"    {excerpt}")
+                lines.append("")
+                ref_num += 1
+            lines.append("")
+
     lines.append("Output markdown with sections: Overview, Recent Developments, Financials, Risks, Outlook.")
     lines.append("Cite sources inline as [n] and provide a Citations list at the end with title + URL.")
     return "\n".join(lines)
@@ -746,7 +769,7 @@ def synthesize_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.2,
-                max_tokens=2000,
+                max_tokens=4096,
             )
             text = (completion.choices[0].message.content or "").strip()
             if not text:
@@ -767,3 +790,9 @@ def synthesize_report(symbols: List[str], sources_per_symbol: List[Dict[str, Any
             return {"title": title, "markdown": md, "html": html, "citations": citations}
         except Exception:
             pass
+
+    # 3) Final fallback: locally generated summary from sources
+    logger.warning("openai_agent: all AI paths failed, using local fallback")
+    title, md, citations = _fallback_report(symbols, sources_per_symbol, user_prompt)
+    html_out = _md.render(md)
+    return {"title": title, "markdown": md, "html": html_out, "citations": citations}

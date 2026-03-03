@@ -51,7 +51,7 @@ resource userIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-
   tags: tags
 }
 
-// Storage Account for Function App
+// Storage Account for Function App (Flex Consumption uses blob storage, no shared key needed)
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   name: 'azst${resourceToken}'
   location: location
@@ -63,20 +63,30 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   properties: {
     minimumTlsVersion: 'TLS1_2'
     allowBlobPublicAccess: false
-    allowSharedKeyAccess: true // Required for Function App
+    allowSharedKeyAccess: false // Flex Consumption supports managed identity only
     supportsHttpsTrafficOnly: true
   }
 }
 
-// Reports blob container
+// Blob service
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {
   parent: storageAccount
   name: 'default'
 }
 
+// Reports blob container
 resource reportsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
   parent: blobService
   name: 'reports'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+// Deployment container for Flex Consumption (required for function app code)
+resource deploymentContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {
+  parent: blobService
+  name: 'deployments'
   properties: {
     publicAccess: 'None'
   }
@@ -169,24 +179,23 @@ resource monitoringMetricsPublisherRole 'Microsoft.Authorization/roleAssignments
   }
 }
 
-// App Service Plan (Premium Elastic - for longer function timeouts)
-resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
+// App Service Plan (Flex Consumption - supports managed identity for storage)
+resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: 'azplan${resourceToken}'
   location: location
   tags: tags
   sku: {
-    name: 'EP1'
-    tier: 'ElasticPremium'
+    name: 'FC1'
+    tier: 'FlexConsumption'
   }
-  kind: 'elastic'
+  kind: 'functionapp'
   properties: {
     reserved: true
-    maximumElasticWorkerCount: 1
   }
 }
 
-// Function App
-resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
+// Function App (Flex Consumption with managed identity storage)
+resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
   name: 'azfunc${resourceToken}'
   location: location
   tags: union(tags, { 'azd-service-name': 'api' })
@@ -199,29 +208,44 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
   }
   properties: {
     serverFarmId: appServicePlan.id
+    functionAppConfig: {
+      deployment: {
+        storage: {
+          type: 'blobContainer'
+          value: '${storageAccount.properties.primaryEndpoints.blob}deployments'
+          authentication: {
+            type: 'UserAssignedIdentity'
+            userAssignedIdentityResourceId: userIdentity.id
+          }
+        }
+      }
+      scaleAndConcurrency: {
+        maximumInstanceCount: 100
+        instanceMemoryMB: 2048
+      }
+      runtime: {
+        name: 'python'
+        version: '3.11'
+      }
+    }
     siteConfig: {
-      linuxFxVersion: 'PYTHON|3.11'
       appSettings: [
+        // Managed identity storage for Flex Consumption
         {
-          // Runtime storage must use connection string on Linux Consumption (Azure Files doesn't support MI)
-          name: 'AzureWebJobsStorage'
-          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
+          name: 'AzureWebJobsStorage__accountName'
+          value: storageAccount.name
         }
         {
-          name: 'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING'
-          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
+          name: 'AzureWebJobsStorage__credential'
+          value: 'managedidentity'
         }
         {
-          name: 'WEBSITE_CONTENTSHARE'
-          value: toLower('azfunc${resourceToken}')
+          name: 'AzureWebJobsStorage__clientId'
+          value: userIdentity.properties.clientId
         }
         {
           name: 'FUNCTIONS_EXTENSION_VERSION'
           value: '~4'
-        }
-        {
-          name: 'FUNCTIONS_WORKER_RUNTIME'
-          value: 'python'
         }
         {
           name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
@@ -324,6 +348,7 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
         allowedOrigins: [
           'https://portal.azure.com'
           'https://black-rock-0a7d0690f.1.azurestaticapps.net'
+          'https://sanrawat-apps-fqb3exfrasbyfjfz.b01.azurefd.net'
         ]
         supportCredentials: false
       }
@@ -332,6 +357,9 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
     }
     httpsOnly: true
   }
+  dependsOn: [
+    deploymentContainer
+  ]
 }
 
 // Diagnostic settings for Function App
